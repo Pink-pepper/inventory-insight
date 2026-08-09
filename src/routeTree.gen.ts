@@ -16,6 +16,7 @@ import { Route as AuthenticatedDataSourcesRouteImport } from './routes/_authenti
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
 
 const IndexRoute = IndexRouteImport.update({
@@ -54,6 +55,11 @@ const AuthenticatedRecommendationsRoute =
     path: '/recommendations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSkuSkuRoute = AuthenticatedSkuSkuRouteImport.update({
   id: '/sku/$sku',
   path: '/sku/$sku',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRoutesByTo {
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRoutesById {
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/overview': typeof AuthenticatedOverviewRoute
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRouteTypes {
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/overview'
     | '/recommendations'
+    | '/settings'
     | '/sku/$sku'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/overview'
     | '/recommendations'
+    | '/settings'
     | '/sku/$sku'
   id:
     | '__root__'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory'
     | '/_authenticated/overview'
     | '/_authenticated/recommendations'
+    | '/_authenticated/settings'
     | '/_authenticated/sku/$sku'
   fileRoutesById: FileRoutesById
 }
@@ -177,6 +189,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecommendationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sku/$sku': {
       id: '/_authenticated/sku/$sku'
       path: '/sku/$sku'
@@ -192,6 +211,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
 }
 
@@ -200,6 +220,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
 }
 
