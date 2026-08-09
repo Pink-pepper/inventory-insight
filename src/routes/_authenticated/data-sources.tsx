@@ -62,9 +62,15 @@ function DataSourcesPage() {
     }
   }
 
-  async function onFile(file: File) {
-    if (!/\.csv$/i.test(file.name)) return toast.error("Please choose a .csv file.");
-    if (file.size > 5_000_000) return toast.error("File exceeds the 5 MB limit.");
+  async function onFile(file: File): Promise<void> {
+    if (!/\.csv$/i.test(file.name)) {
+      toast.error("Please choose a .csv file.");
+      return;
+    }
+    if (file.size > 5_000_000) {
+      toast.error("File exceeds the 5 MB limit.");
+      return;
+    }
     const content = await file.text();
     await run("csv", { filename: file.name, content });
   }

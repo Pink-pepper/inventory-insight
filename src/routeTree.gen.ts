@@ -12,9 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedDataSourcesRouteImport } from './routes/_authenticated/data-sources'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
+import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -30,6 +32,12 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedDataSourcesRoute =
+  AuthenticatedDataSourcesRouteImport.update({
+    id: '/data-sources',
+    path: '/data-sources',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -46,43 +54,70 @@ const AuthenticatedRecommendationsRoute =
     path: '/recommendations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSkuSkuRoute = AuthenticatedSkuSkuRouteImport.update({
+  id: '/sku/$sku',
+  path: '/sku/$sku',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
+  '/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
+  '/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/data-sources': typeof AuthenticatedDataSourcesRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/overview': typeof AuthenticatedOverviewRoute
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
+  '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/inventory' | '/overview' | '/recommendations'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/data-sources'
+    | '/inventory'
+    | '/overview'
+    | '/recommendations'
+    | '/sku/$sku'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/inventory' | '/overview' | '/recommendations'
+  to:
+    | '/'
+    | '/auth'
+    | '/data-sources'
+    | '/inventory'
+    | '/overview'
+    | '/recommendations'
+    | '/sku/$sku'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/data-sources'
     | '/_authenticated/inventory'
     | '/_authenticated/overview'
     | '/_authenticated/recommendations'
+    | '/_authenticated/sku/$sku'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -114,6 +149,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/data-sources': {
+      id: '/_authenticated/data-sources'
+      path: '/data-sources'
+      fullPath: '/data-sources'
+      preLoaderRoute: typeof AuthenticatedDataSourcesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/inventory': {
       id: '/_authenticated/inventory'
       path: '/inventory'
@@ -135,19 +177,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecommendationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sku/$sku': {
+      id: '/_authenticated/sku/$sku'
+      path: '/sku/$sku'
+      fullPath: '/sku/$sku'
+      preLoaderRoute: typeof AuthenticatedSkuSkuRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedDataSourcesRoute: typeof AuthenticatedDataSourcesRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
+  AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedDataSourcesRoute: AuthenticatedDataSourcesRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
+  AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

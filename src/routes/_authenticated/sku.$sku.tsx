@@ -64,7 +64,7 @@ function SkuPage() {
   return (
     <AppShell
       title={data ? `${data.sku} · ${data.name}` : sku}
-      description={data ? `${data.category} · supplied by ${data.supplierName}` : undefined}
+      description={data ? `${data.category} · supplied by ${data.supplierName}` : "SKU analysis"}
       actions={
         <Button asChild variant="outline" size="sm">
           <Link to="/recommendations">
