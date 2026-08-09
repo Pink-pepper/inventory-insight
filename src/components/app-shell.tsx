@@ -1,0 +1,174 @@
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  LayoutDashboard,
+  Boxes,
+  ClipboardList,
+  Database,
+  Settings,
+  LogOut,
+  Loader2,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { getWorkspace } from "@/lib/ionic.functions";
+import { cn } from "@/lib/utils";
+
+const NAV = [
+  { to: "/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/inventory", label: "Inventory", icon: Boxes },
+  { to: "/recommendations", label: "Recommendations", icon: ClipboardList },
+  { to: "/data-sources", label: "Data Sources", icon: Database },
+  { to: "/settings", label: "Settings", icon: Settings },
+] as const;
+
+export function useWorkspace() {
+  const fn = useServerFn(getWorkspace);
+  return useQuery({ queryKey: ["workspace"], queryFn: () => fn() });
+}
+
+export function AppShell({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const { data } = useWorkspace();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  async function signOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
+
+  const initials = (data?.profile.name || data?.profile.email || "?")
+    .split(/[\s@.]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <div className="flex min-h-screen w-full bg-background">
+      <aside className="hidden w-60 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
+        <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-5">
+          <div className="flex size-6 items-center justify-center rounded-sm bg-sidebar-primary text-[13px] font-bold text-sidebar-primary-foreground">
+            I
+          </div>
+          <span className="text-sm font-semibold tracking-tight text-sidebar-accent-foreground">Ionic</span>
+        </div>
+
+        <div className="border-b border-sidebar-border px-5 py-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/50">
+            Workspace
+          </p>
+          <p className="mt-1 truncate text-sm font-medium text-sidebar-accent-foreground">
+            {data?.org.name ?? "…"}
+          </p>
+        </div>
+
+        <nav className="flex-1 space-y-0.5 p-3">
+          {NAV.map((item) => {
+            const active = pathname === item.to || pathname.startsWith(item.to + "/");
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
+                  active
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                )}
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-sidebar-border p-3">
+          <div className="flex items-center gap-2.5 px-1.5 py-1.5">
+            <div className="flex size-7 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-sidebar-accent-foreground">
+                {data?.profile.name || "Account"}
+              </p>
+              <p className="truncate text-[11px] text-sidebar-foreground/60">{data?.role}</p>
+            </div>
+            <button
+              onClick={signOut}
+              aria-label="Sign out"
+              className="rounded-sm p-1.5 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <LogOut className="size-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex flex-col gap-3 border-b border-border bg-surface px-6 py-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+            {description ? (
+              <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">{actions}</div>
+        </header>
+        <nav className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-4 py-2 md:hidden">
+          {NAV.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="rounded-sm px-2.5 py-1.5 text-xs font-medium text-muted-foreground data-[status=active]:bg-accent data-[status=active]:text-foreground"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <main className="min-w-0 flex-1 p-6">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+export function Loading({ label = "Loading" }: { label?: string }) {
+  return (
+    <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
+      <Loader2 className="size-4 animate-spin" /> {label}…
+    </div>
+  );
+}
+
+export function EmptyState({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="panel flex flex-col items-center justify-center px-6 py-16 text-center">
+      <Database className="size-6 text-muted-foreground" />
+      <h3 className="mt-3 text-sm font-semibold text-foreground">{title}</h3>
+      <p className="mt-1 max-w-md text-sm text-muted-foreground">{body}</p>
+      {action ? <div className="mt-5">{action}</div> : null}
+    </div>
+  );
+}
