@@ -261,7 +261,7 @@ export function buildExplanation(
         headline: `ORDER ${units(qty).toUpperCase()}`,
         why: `${Math.round(m.daysOfCover)} days of cover on hand against a ${signal.leadTimeDays}-day supplier lead time. Available stock of ${units(m.netAvailable)} has reached the reorder point of ${units(m.reorderPoint)}.`,
         ...base,
-        spend: money(m.excessValue >= 0 ? qty * signal.unitCost : 0),
+        spend: signal.unitCost > 0 ? money(qty * signal.unitCost) : "Unit cost not provided",
       };
     case "WATCH":
       return {
