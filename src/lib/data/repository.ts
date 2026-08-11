@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import type { CanonicalDataset, SkuSignal } from "@/lib/domain/model";
+import type { CanonicalDataset, InventoryPosition, SkuSignal } from "@/lib/domain/model";
 import { evaluateAll } from "@/lib/engine/inventory-engine";
 
 export type Db = SupabaseClient<Database>;
@@ -140,22 +140,56 @@ export interface LoadedSku extends SkuSignal {
 
 /** Reads the canonical model back out and shapes it for the decision engine. */
 export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSku[]> {
-  const [{ data: products, error: pErr }, { data: inventory, error: iErr }, { data: sales, error: sErr }] =
-    await Promise.all([
-      supabase
-        .from("products")
-        .select(
-          "id, sku, name, category, unit_cost, lead_time_days, min_order_qty, safety_stock_days, suppliers(name, code, lead_time_days, min_order_qty)",
-        )
-        .eq("org_id", orgId),
-      supabase.from("inventory").select("product_id, on_hand, on_order").eq("org_id", orgId),
-      supabase.from("sales").select("product_id, period_month, quantity").eq("org_id", orgId),
-    ]);
+  const [
+    { data: products, error: pErr },
+    { data: inventory, error: iErr },
+    { data: sales, error: sErr },
+    { data: openPos, error: poErr },
+  ] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "id, sku, name, category, unit_cost, lead_time_days, min_order_qty, safety_stock_days, suppliers(name, code, lead_time_days, min_order_qty)",
+      )
+      .eq("org_id", orgId),
+    supabase
+      .from("inventory")
+      .select("product_id, on_hand, on_order, location, as_of")
+      .eq("org_id", orgId),
+    supabase.from("sales").select("product_id, period_month, quantity").eq("org_id", orgId),
+    supabase
+      .from("purchase_orders")
+      .select("product_id, expected_at")
+      .eq("org_id", orgId)
+      .eq("status", "placed")
+      .not("expected_at", "is", null),
+  ]);
   if (pErr) throw new Error(pErr.message);
   if (iErr) throw new Error(iErr.message);
   if (sErr) throw new Error(sErr.message);
+  if (poErr) throw new Error(poErr.message);
 
-  const invByProduct = new Map((inventory ?? []).map((i) => [i.product_id, i]));
+  // Location context is preserved: every position is kept and the planning
+  // figure is the aggregate, never a silently-dropped single row.
+  const positionsByProduct = new Map<string, InventoryPosition[]>();
+  for (const i of inventory ?? []) {
+    const list = positionsByProduct.get(i.product_id) ?? [];
+    list.push({
+      location: i.location,
+      onHand: Number(i.on_hand),
+      onOrder: Number(i.on_order),
+      asOf: i.as_of,
+    });
+    positionsByProduct.set(i.product_id, list);
+  }
+
+  const arrivalByProduct = new Map<string, string>();
+  for (const po of openPos ?? []) {
+    if (!po.product_id || !po.expected_at) continue;
+    const current = arrivalByProduct.get(po.product_id);
+    if (!current || po.expected_at < current) arrivalByProduct.set(po.product_id, po.expected_at);
+  }
+
   const salesByProduct = new Map<string, { periodMonth: string; quantity: number }[]>();
   for (const s of sales ?? []) {
     const list = salesByProduct.get(s.product_id) ?? [];
@@ -170,7 +204,15 @@ export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSk
       lead_time_days: number;
       min_order_qty: number;
     } | null;
-    const inv = invByProduct.get(p.id);
+    const positions = positionsByProduct.get(p.id) ?? [];
+    // No invented lead time: if neither the product nor the supplier declares
+    // one, it stays null and the engine reports it as a data-quality block.
+    const productLead = p.lead_time_days && p.lead_time_days > 0 ? p.lead_time_days : null;
+    const supplierLead =
+      supplier?.lead_time_days && supplier.lead_time_days > 0 ? supplier.lead_time_days : null;
+    const leadTimeDays = productLead ?? supplierLead;
+    const leadTimeSource: SkuSignal["leadTimeSource"] =
+      productLead != null ? "product" : supplierLead != null ? "supplier" : "missing";
     return {
       productId: p.id,
       sku: p.sku,
@@ -179,11 +221,14 @@ export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSk
       unitCost: Number(p.unit_cost),
       supplierName: supplier?.name ?? "Unassigned",
       supplierCode: supplier?.code ?? "—",
-      leadTimeDays: p.lead_time_days ?? supplier?.lead_time_days ?? 14,
+      leadTimeDays,
+      leadTimeSource,
       minOrderQty: p.min_order_qty ?? supplier?.min_order_qty ?? 1,
       safetyStockDays: p.safety_stock_days,
-      onHand: Number(inv?.on_hand ?? 0),
-      onOrder: Number(inv?.on_order ?? 0),
+      onHand: positions.reduce((sum, l) => sum + l.onHand, 0),
+      onOrder: positions.reduce((sum, l) => sum + l.onOrder, 0),
+      locations: positions,
+      expectedArrival: arrivalByProduct.get(p.id) ?? null,
       monthlySales: salesByProduct.get(p.id) ?? [],
     };
   });
@@ -194,6 +239,10 @@ export async function regenerateRecommendations(supabase: Db, orgId: string) {
   const signals = await loadSignals(supabase, orgId);
   const bySku = new Map(signals.map((s) => [s.sku, s]));
   const results = evaluateAll(signals);
+
+  // Provenance: one run id per regeneration, stamped on every row it produced.
+  const runId = crypto.randomUUID();
+  const runStartedAt = new Date().toISOString();
 
   const rows = results.map((r) => ({
     org_id: orgId,
@@ -208,6 +257,8 @@ export async function regenerateRecommendations(supabase: Db, orgId: string) {
     reorder_point: r.reorderPoint,
     reason: r.reason,
     generated_at: new Date().toISOString(),
+    run_id: runId,
+    run_started_at: runStartedAt,
   }));
 
   for (const part of chunk(rows, 500)) {
@@ -216,7 +267,30 @@ export async function regenerateRecommendations(supabase: Db, orgId: string) {
       .upsert(part, { onConflict: "org_id,product_id" });
     if (error) throw new Error(error.message);
   }
-  return { evaluated: results.length };
+  return {
+    evaluated: results.length,
+    runId,
+    runStartedAt,
+    blocked: results.filter((r) => r.blocked).length,
+  };
+}
+
+/** Provenance of the most recent stored run, for the "when was this generated" question. */
+export async function getLastRun(supabase: Db, orgId: string) {
+  const { data, error } = await supabase
+    .from("recommendations")
+    .select("run_id, run_started_at, generated_at")
+    .eq("org_id", orgId)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    runId: data.run_id,
+    runStartedAt: data.run_started_at,
+    generatedAt: data.generated_at,
+  };
 }
 
 /** Joins stored signals with engine output for presentation. */

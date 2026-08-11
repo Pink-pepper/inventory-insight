@@ -154,6 +154,44 @@ export function Loading({ label = "Loading" }: { label?: string }) {
   );
 }
 
+/** Skeleton placeholder for data-heavy sections. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn("animate-pulse rounded-sm bg-muted", className)} />;
+}
+
+export function TableSkeleton({ rows = 8, columns = 6 }: { rows?: number; columns?: number }) {
+  return (
+    <div className="panel divide-y divide-border" aria-busy="true" aria-label="Loading data">
+      <div className="flex gap-4 bg-surface-muted px-3 py-2.5">
+        {Array.from({ length: columns }).map((_, i) => (
+          <Skeleton key={i} className="h-3 flex-1" />
+        ))}
+      </div>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className="flex gap-4 px-3 py-3">
+          {Array.from({ length: columns }).map((_, c) => (
+            <Skeleton key={c} className="h-3.5 flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function CardsSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="panel px-4 py-3.5">
+          <Skeleton className="h-2.5 w-24" />
+          <Skeleton className="mt-3 h-6 w-20" />
+          <Skeleton className="mt-2.5 h-2.5 w-28" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function EmptyState({
   title,
   body,

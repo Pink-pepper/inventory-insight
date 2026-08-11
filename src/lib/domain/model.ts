@@ -36,6 +36,8 @@ export interface CanonicalInventory {
   onOrder: number;
   location: string;
   asOf: string; // ISO date
+  /** Earliest expected arrival for the on-order quantity, when known. */
+  expectedAt?: string | null;
 }
 
 export interface CanonicalSale {
@@ -53,6 +55,18 @@ export interface CanonicalDataset {
   sales: CanonicalSale[];
 }
 
+/** A stock position at a single physical location. */
+export interface InventoryPosition {
+  location: string;
+  onHand: number;
+  onOrder: number;
+  asOf: string;
+  expectedAt?: string | null;
+}
+
+/** Where a lead time came from, so the UI never implies precision it does not have. */
+export type LeadTimeSource = "product" | "supplier" | "missing";
+
 /** Inputs the decision engine needs for a single SKU. */
 export interface SkuSignal {
   sku: string;
@@ -60,10 +74,18 @@ export interface SkuSignal {
   category: string;
   unitCost: number;
   supplierName: string;
-  leadTimeDays: number;
+  /** Null when neither the product nor its supplier declares a lead time. */
+  leadTimeDays: number | null;
+  leadTimeSource: LeadTimeSource;
   minOrderQty: number;
   safetyStockDays: number;
+  /** Aggregate physical stock across all locations. */
   onHand: number;
+  /** Aggregate inbound stock across all locations. Not yet physically available. */
   onOrder: number;
+  /** Per-location breakdown. Planning is aggregate; allocation is not optimised. */
+  locations: InventoryPosition[];
+  /** Earliest known expected arrival across open purchase orders. */
+  expectedArrival: string | null;
   monthlySales: { periodMonth: string; quantity: number }[];
 }

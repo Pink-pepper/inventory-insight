@@ -6,10 +6,12 @@ import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
   buildRecommendationView,
+  getLastRun,
   persistDataset,
   regenerateRecommendations,
   resolveOrg,
 } from "@/lib/data/repository";
+import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 import { summarise } from "@/lib/analytics/summary";
 
 export const getWorkspace = createServerFn({ method: "GET" })
@@ -49,7 +51,8 @@ export const ingestDataset = createServerFn({ method: "POST" })
     const { orgId } = await resolveOrg(supabase, userId);
 
     let dataset;
-    let issues: { row: number; field: string; message: string }[] = [];
+    let issues: IngestionIssue[] = [];
+    let stats: IngestionStats = { rowsRead: 0, rowsAccepted: 0, rowsRejected: 0, warnings: 0 };
     let label = "Demo dataset";
 
     if (data.source === "csv") {
@@ -60,13 +63,23 @@ export const ingestDataset = createServerFn({ method: "POST" })
       if (bytes > 5_000_000) throw new Error("File exceeds the 5 MB limit.");
       const parsed = csvConnector.parse(data.content);
       if (parsed.dataset.products.length === 0) {
-        throw new Error(parsed.issues[0]?.message ?? "No valid rows found in the file.");
+        throw new Error(
+          parsed.issues.find((i) => i.severity === "error")?.message ??
+            "No valid rows found in the file.",
+        );
       }
       dataset = parsed.dataset;
-      issues = parsed.issues.slice(0, 25);
+      issues = parsed.issues.slice(0, 50);
+      stats = parsed.stats;
       label = filename;
     } else {
       dataset = buildDemoDataset();
+      stats = {
+        rowsRead: dataset.sales.length,
+        rowsAccepted: dataset.sales.length,
+        rowsRejected: 0,
+        warnings: 0,
+      };
     }
 
     const counts = await persistDataset(supabase, orgId, dataset);
@@ -77,20 +90,27 @@ export const ingestDataset = createServerFn({ method: "POST" })
       status: "active",
       last_sync_at: new Date().toISOString(),
       rows_ingested: counts.sales + counts.products,
-      error_count: issues.length,
+      error_count: stats.rowsRejected,
     });
     if (dsError) throw new Error(dsError.message);
 
-    const { evaluated } = await regenerateRecommendations(supabase, orgId);
+    const run = await regenerateRecommendations(supabase, orgId);
     await audit(supabase, orgId, userId, "data.upload", {
       source: data.source,
       label,
       products: counts.products,
       sales: counts.sales,
+      rows_accepted: stats.rowsAccepted,
+      rows_rejected: stats.rowsRejected,
+      warnings: stats.warnings,
     });
-    await audit(supabase, orgId, userId, "recommendations.generated", { evaluated });
+    await audit(supabase, orgId, userId, "recommendations.generated", {
+      evaluated: run.evaluated,
+      blocked: run.blocked,
+      run_id: run.runId,
+    });
 
-    return { ...counts, evaluated, issues };
+    return { ...counts, evaluated: run.evaluated, issues, stats, run };
   });
 
 export const getOverview = createServerFn({ method: "GET" })
@@ -98,8 +118,11 @@ export const getOverview = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
-    const rows = await buildRecommendationView(supabase, orgId);
-    return summarise(rows);
+    const [rows, lastRun] = await Promise.all([
+      buildRecommendationView(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    return { ...summarise(rows), lastRun, calculatedAt: new Date().toISOString() };
   });
 
 export const getRecommendations = createServerFn({ method: "GET" })
@@ -107,7 +130,11 @@ export const getRecommendations = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
-    return buildRecommendationView(supabase, orgId);
+    const [rows, lastRun] = await Promise.all([
+      buildRecommendationView(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    return { rows, lastRun, calculatedAt: new Date().toISOString() };
   });
 
 export const getSkuDetail = createServerFn({ method: "GET" })
@@ -116,8 +143,13 @@ export const getSkuDetail = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
-    const rows = await buildRecommendationView(supabase, orgId);
-    return rows.find((r) => r.sku === data.sku) ?? null;
+    const [rows, lastRun] = await Promise.all([
+      buildRecommendationView(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    const row = rows.find((r) => r.sku === data.sku);
+    if (!row) return null;
+    return { ...row, lastRun, calculatedAt: new Date().toISOString() };
   });
 
 export const regenerate = createServerFn({ method: "POST" })
@@ -126,7 +158,11 @@ export const regenerate = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
     const result = await regenerateRecommendations(supabase, orgId);
-    await audit(supabase, orgId, userId, "recommendations.generated", result);
+    await audit(supabase, orgId, userId, "recommendations.generated", {
+      evaluated: result.evaluated,
+      blocked: result.blocked,
+      run_id: result.runId,
+    });
     return result;
   });
 

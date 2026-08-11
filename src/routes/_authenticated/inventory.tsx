@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { AppShell, EmptyState, Loading } from "@/components/app-shell";
+import { AppShell, EmptyState, TableSkeleton } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,28 +30,43 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 function InventoryPage() {
   const fn = useServerFn(getRecommendations);
-  const { data, isLoading } = useQuery({ queryKey: ["recommendations"], queryFn: () => fn() });
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["recommendations"],
+    queryFn: () => fn(),
+  });
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
 
-  const categories = useMemo(
-    () => ["ALL", ...new Set((data ?? []).map((r) => r.category))],
-    [data],
-  );
+  const all = useMemo(() => data?.rows ?? [], [data]);
+
+  const categories = useMemo(() => ["ALL", ...new Set(all.map((r) => r.category))], [all]);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return (data ?? [])
+    return all
       .filter((r) => category === "ALL" || r.category === category)
       .filter((r) => term === "" || r.sku.toLowerCase().includes(term) || r.name.toLowerCase().includes(term))
       .sort((a, b) => b.inventoryValue - a.inventoryValue);
-  }, [data, search, category]);
+  }, [all, search, category]);
 
   return (
-    <AppShell title="Inventory" description="Canonical stock positions across all products.">
+    <AppShell
+      title="Inventory"
+      description="On-hand and inbound stock positions across all products and locations."
+    >
       {isLoading ? (
-        <Loading />
-      ) : (data ?? []).length === 0 ? (
+        <TableSkeleton columns={9} />
+      ) : isError ? (
+        <EmptyState
+          title="Could not load inventory"
+          body={error instanceof Error ? error.message : "The inventory query did not return a result."}
+          action={
+            <Button size="sm" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      ) : all.length === 0 ? (
         <EmptyState
           title="No inventory loaded"
           body="Once a data source is connected, every product position appears here with cover and value."
@@ -97,6 +112,7 @@ function InventoryPage() {
                   <th className="px-3 py-2.5 font-medium">Supplier</th>
                   <th className="px-3 py-2.5 text-right font-medium">On hand</th>
                   <th className="px-3 py-2.5 text-right font-medium">On order</th>
+                  <th className="px-3 py-2.5 font-medium">Locations</th>
                   <th className="px-3 py-2.5 text-right font-medium">Cover</th>
                   <th className="px-3 py-2.5 text-right font-medium">Unit cost</th>
                   <th className="px-3 py-2.5 text-right font-medium">Value</th>
@@ -119,7 +135,16 @@ function InventoryPage() {
                     <td className="px-3 py-2.5 text-muted-foreground">{r.category}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{r.supplierName}</td>
                     <td className="px-3 py-2.5 text-right tabular">{num(r.onHand)}</td>
-                    <td className="px-3 py-2.5 text-right tabular">{num(r.onOrder)}</td>
+                    <td className="px-3 py-2.5 text-right tabular text-muted-foreground">
+                      {r.onOrder ? num(r.onOrder) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                      {r.locations.length === 0
+                        ? "—"
+                        : r.locations.length === 1
+                          ? r.locations[0]!.location
+                          : `${r.locations.length} locations`}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular">{cover(r.daysOfCover)}</td>
                     <td className="px-3 py-2.5 text-right tabular">{money(r.unitCost, 2)}</td>
                     <td className="px-3 py-2.5 text-right tabular">{money(r.inventoryValue)}</td>
