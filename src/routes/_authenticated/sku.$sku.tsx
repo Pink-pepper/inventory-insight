@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppShell, EmptyState, Loading } from "@/components/app-shell";
+import { AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { getSkuDetail } from "@/lib/ionic.functions";
@@ -44,6 +45,23 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
         {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
       </div>
       <p className="shrink-0 text-sm font-medium tabular">{value}</p>
+    </div>
+  );
+}
+
+function Facts({ heading, items }: { heading: string; items: string[] }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {heading}
+      </p>
+      <ul className="mt-1.5 space-y-1">
+        {items.map((line, i) => (
+          <li key={i} className="text-xs leading-relaxed text-foreground">
+            {line}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -91,16 +109,71 @@ function SkuPage() {
                   : "No purchase recommended"}
               </span>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-foreground">{data.reason}</p>
+
+            <p className="mt-4 text-base font-semibold tracking-tight text-foreground">
+              {data.explanation.headline}
+            </p>
+            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+              {data.explanation.why}
+            </p>
+
+            <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-3">
+              <Facts heading="Demand" items={data.explanation.demand} />
+              <Facts heading="Inventory" items={data.explanation.inventory} />
+              <Facts heading="Policy" items={data.explanation.policy} />
+            </div>
+            {data.explanation.spend ? (
+              <p className="mt-4 border-t border-border pt-3 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Estimated spend
+                </span>
+                <span className="ml-2 font-semibold tabular">{data.explanation.spend}</span>
+              </p>
+            ) : null}
+            {data.lastRun?.generatedAt ? (
+              <p className="mt-3 text-[11px] text-muted-foreground tabular">
+                Calculated live · last stored run{" "}
+                {new Date(data.lastRun.generatedAt).toLocaleString()}
+                {data.lastRun.runId ? ` (run ${data.lastRun.runId.slice(0, 8)})` : ""}
+              </p>
+            ) : null}
           </section>
+
+          {data.dataQuality.length > 0 ? (
+            <section className="flex items-start gap-2.5 rounded-md border border-status-watch/30 bg-status-watch-soft px-4 py-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-watch" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">Data quality</p>
+                <ul className="mt-1 space-y-0.5">
+                  {data.dataQuality.map((d) => (
+                    <li key={d.field} className="text-xs leading-relaxed text-foreground">
+                      {d.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          ) : null}
 
           <div className="grid gap-3 lg:grid-cols-2">
             <section className="panel p-5">
               <h2 className="text-sm font-semibold">Decision inputs</h2>
               <div className="mt-2">
-                <Row label="On hand" value={num(data.onHand)} />
-                <Row label="On order" value={num(data.onOrder)} />
-                <Row label="Net available" value={num(data.netAvailable)} hint="On hand + on order" />
+                <Row label="On hand" value={num(data.onHand)} hint="Physically available now" />
+                <Row
+                  label="On order"
+                  value={num(data.onOrder)}
+                  hint={
+                    data.expectedArrival
+                      ? `Inbound, not yet received · earliest expected ${data.expectedArrival}`
+                      : "Inbound, not yet received"
+                  }
+                />
+                <Row
+                  label="Net available"
+                  value={num(data.netAvailable)}
+                  hint="On hand + on order, used for the reorder-point test only"
+                />
                 <Row
                   label="Average monthly demand"
                   value={num(data.avgMonthlyDemand, 1)}
@@ -112,7 +185,15 @@ function SkuPage() {
                   value={`${data.demandTrendPct > 0 ? "+" : ""}${num(data.demandTrendPct, 1)}%`}
                   hint="Last 3 months vs prior 3 months"
                 />
-                <Row label="Supplier lead time" value={`${data.leadTimeDays} days`} />
+                <Row
+                  label="Supplier lead time"
+                  value={data.leadTimeDays == null ? "Not provided" : `${data.leadTimeDays} days`}
+                  hint={
+                    data.leadTimeSource === "missing"
+                      ? "No lead time on the product or its supplier"
+                      : `From the ${data.leadTimeSource} record`
+                  }
+                />
                 <Row label="Minimum order quantity" value={num(data.minOrderQty)} />
                 <Row label="Unit cost" value={money(data.unitCost, 2)} />
               </div>
@@ -121,7 +202,11 @@ function SkuPage() {
             <section className="panel p-5">
               <h2 className="text-sm font-semibold">Calculated position</h2>
               <div className="mt-2">
-                <Row label="Days of cover" value={cover(data.daysOfCover)} />
+                <Row
+                  label="Days of cover"
+                  value={cover(data.daysOfCover)}
+                  hint="Based on on-hand stock only"
+                />
                 <Row
                   label="Safety stock"
                   value={num(data.safetyStock)}
@@ -143,6 +228,42 @@ function SkuPage() {
               </div>
             </section>
           </div>
+
+          {data.locations.length > 0 ? (
+            <section className="panel">
+              <header className="border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold">Stock by location</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Ionic plans on the aggregate position. It does not yet optimise allocation between
+                  locations.
+                </p>
+              </header>
+              <table className="w-full text-sm">
+                <thead className="bg-surface-muted">
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-4 py-2 font-medium">Location</th>
+                    <th className="px-4 py-2 text-right font-medium">On hand</th>
+                    <th className="px-4 py-2 text-right font-medium">On order</th>
+                    <th className="px-4 py-2 text-right font-medium">As of</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.locations.map((l) => (
+                    <tr key={l.location} className="border-t border-border/70">
+                      <td className="px-4 py-2.5">{l.location}</td>
+                      <td className="px-4 py-2.5 text-right tabular">{num(l.onHand)}</td>
+                      <td className="px-4 py-2.5 text-right tabular text-muted-foreground">
+                        {l.onOrder ? num(l.onOrder) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular text-muted-foreground">
+                        {l.asOf}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          ) : null}
 
           <section className="panel">
             <header className="border-b border-border px-4 py-3">
