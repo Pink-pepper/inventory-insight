@@ -68,6 +68,13 @@ function num(value: string | undefined, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** Parses a numeric cell, distinguishing "absent" from "not a number". */
+function parseNumber(value: string | undefined): { value: number | null; malformed: boolean } {
+  if (value == null || value.trim() === "") return { value: null, malformed: false };
+  const parsed = Number(value.replace(/[$,\s]/g, ""));
+  return Number.isFinite(parsed) ? { value: parsed, malformed: false } : { value: null, malformed: true };
+}
+
 function monthKey(value: string | undefined): string | null {
   if (!value) return null;
   const v = value.trim();
@@ -93,18 +100,53 @@ export const csvConnector: Connector<string> = {
     if (lines.length < 2) {
       return {
         dataset: { suppliers: [], products: [], inventory: [], sales: [] },
-        issues: [{ row: 0, field: "file", message: "File is empty or has no data rows." }],
+        issues: [
+          { row: 0, field: "file", message: "File is empty or has no data rows.", severity: "error" },
+        ],
         rowsParsed: 0,
+        stats: { rowsRead: 0, rowsAccepted: 0, rowsRejected: 0, warnings: 0 },
       };
     }
 
-    const headers = splitLine(lines[0]!).map(normaliseHeader);
+    const rawHeaders = splitLine(lines[0]!);
+    const headers = rawHeaders.map(normaliseHeader);
+    const totalRows = lines.length - 1;
     if (!headers.includes("sku")) {
       return {
         dataset: { suppliers: [], products: [], inventory: [], sales: [] },
-        issues: [{ row: 1, field: "sku", message: "No recognisable SKU column found in the header row." }],
+        issues: [
+          {
+            row: 1,
+            field: "sku",
+            message: `No recognisable SKU column in the header row. Found: ${rawHeaders.join(", ")}.`,
+            severity: "error",
+          },
+        ],
         rowsParsed: 0,
+        stats: { rowsRead: totalRows, rowsAccepted: 0, rowsRejected: totalRows, warnings: 0 },
       };
+    }
+
+    // Columns we could not map are reported once, not per row.
+    rawHeaders.forEach((raw, idx) => {
+      if (raw.trim() !== "" && headers[idx] === null) {
+        issues.push({
+          row: 1,
+          field: raw,
+          message: `Column "${raw}" is not recognised and was ignored.`,
+          severity: "warning",
+        });
+      }
+    });
+    for (const required of ["unit_cost", "on_hand", "units_sold"] as const) {
+      if (!headers.includes(required)) {
+        issues.push({
+          row: 1,
+          field: required,
+          message: `No "${required}" column found. Recommendations that depend on it will be limited.`,
+          severity: "warning",
+        });
+      }
     }
 
     const suppliers = new Map<string, CanonicalDataset["suppliers"][number]>();
@@ -113,6 +155,9 @@ export const csvConnector: Connector<string> = {
     const sales = new Map<string, CanonicalDataset["sales"][number]>();
     const asOf = new Date().toISOString().slice(0, 10);
     let rowsParsed = 0;
+    let rowsRejected = 0;
+    const seenRowBySku = new Map<string, number>();
+    const today = new Date().toISOString().slice(0, 10);
 
     for (let i = 1; i < lines.length; i++) {
       const cells = splitLine(lines[i]!);
@@ -123,55 +168,147 @@ export const csvConnector: Connector<string> = {
 
       const sku = row["sku"];
       if (!sku) {
-        issues.push({ row: i + 1, field: "sku", message: "Missing SKU — row skipped." });
+        issues.push({
+          row: i + 1,
+          field: "sku",
+          message: "Missing SKU. Row rejected.",
+          severity: "error",
+        });
+        rowsRejected++;
         continue;
       }
+
+      // Numeric validation before anything is written into the canonical model.
+      const numeric: Record<string, number | null> = {};
+      let rejected = false;
+      for (const field of ["unit_cost", "on_hand", "on_order", "units_sold", "lead_time_days", "moq", "safety_stock_days"] as const) {
+        const { value, malformed } = parseNumber(row[field]);
+        if (malformed) {
+          issues.push({
+            row: i + 1,
+            field,
+            message: `"${row[field]}" is not a valid number. Row rejected.`,
+            severity: "error",
+          });
+          rejected = true;
+        }
+        numeric[field] = value;
+      }
+      for (const field of ["on_hand", "on_order", "units_sold", "unit_cost"] as const) {
+        const v = numeric[field];
+        if (v != null && v < 0) {
+          issues.push({
+            row: i + 1,
+            field,
+            message: `Negative value (${v}) is not valid for ${field.replace(/_/g, " ")}. Row rejected.`,
+            severity: "error",
+          });
+          rejected = true;
+        }
+      }
+      if (rejected) {
+        rowsRejected++;
+        continue;
+      }
+
+      if (numeric["unit_cost"] == null || numeric["unit_cost"] === 0) {
+        issues.push({
+          row: i + 1,
+          field: "unit_cost",
+          message: `Unit cost is missing for ${sku}. Spend and inventory value cannot be calculated.`,
+          severity: "warning",
+        });
+      }
+      if (!row["supplier_name"] && !row["supplier_code"]) {
+        issues.push({
+          row: i + 1,
+          field: "supplier_name",
+          message: `No supplier for ${sku}. Ordering terms cannot be applied.`,
+          severity: "warning",
+        });
+      }
+      if (numeric["lead_time_days"] == null) {
+        issues.push({
+          row: i + 1,
+          field: "lead_time_days",
+          message: `No supplier lead time for ${sku}. A reorder point cannot be calculated for this SKU.`,
+          severity: "warning",
+        });
+      }
+
       rowsParsed++;
 
       const supplierName = row["supplier_name"] || "Unassigned supplier";
       const supplierCode =
         row["supplier_code"] || supplierName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "UNASSIGNED";
-      const leadTime = Math.max(1, Math.round(num(row["lead_time_days"], 14)));
-      const moq = Math.max(1, Math.round(num(row["moq"], 1)));
+      // No invented lead time: absent stays absent all the way to the engine.
+      const leadTime =
+        numeric["lead_time_days"] != null ? Math.max(1, Math.round(numeric["lead_time_days"])) : null;
+      const moq = numeric["moq"] != null ? Math.max(1, Math.round(numeric["moq"])) : 1;
 
       if (!suppliers.has(supplierCode)) {
         suppliers.set(supplierCode, {
           externalRef: supplierCode,
           name: supplierName,
           code: supplierCode,
-          leadTimeDays: leadTime,
+          leadTimeDays: leadTime ?? 0,
           minOrderQty: moq,
           reliability: 0.95,
         });
       }
 
-      if (!products.has(sku)) {
+      const firstSeen = seenRowBySku.get(sku);
+      if (firstSeen == null) {
+        seenRowBySku.set(sku, i + 1);
         products.set(sku, {
           sku,
           name: row["product_name"] || sku,
           category: row["category"] || "Uncategorised",
-          unitCost: num(row["unit_cost"], 0),
+          unitCost: numeric["unit_cost"] ?? 0,
           supplierCode,
           leadTimeDays: leadTime,
           minOrderQty: moq,
-          safetyStockDays: Math.max(0, Math.round(num(row["safety_stock_days"], 14))),
+          safetyStockDays: Math.max(0, Math.round(numeric["safety_stock_days"] ?? 14)),
         });
+      } else {
+        const existing = products.get(sku)!;
+        const conflicting =
+          (numeric["unit_cost"] != null && numeric["unit_cost"] !== existing.unitCost) ||
+          (row["product_name"] && row["product_name"] !== existing.name);
+        if (conflicting) {
+          issues.push({
+            row: i + 1,
+            field: "sku",
+            message: `${sku} appears again with different product details. The values from row ${firstSeen} were kept.`,
+            severity: "warning",
+          });
+        }
       }
 
-      if (!inventory.has(sku) && row["on_hand"] !== undefined) {
+      const location = row["location"] || "MAIN";
+      const invKey = `${sku}|${location}`;
+      if (!inventory.has(invKey) && numeric["on_hand"] != null) {
         inventory.set(sku, {
           sku,
-          onHand: num(row["on_hand"], 0),
-          onOrder: num(row["on_order"], 0),
-          location: "MAIN",
+          onHand: numeric["on_hand"],
+          onOrder: numeric["on_order"] ?? 0,
+          location,
           asOf,
         });
       }
 
       const month = monthKey(row["month"]);
       if (month) {
+        if (month > today) {
+          issues.push({
+            row: i + 1,
+            field: "month",
+            message: `Period ${month.slice(0, 7)} is in the future and was excluded from demand history.`,
+            severity: "warning",
+          });
+        } else {
         const key = `${sku}|${month}`;
-        const qty = num(row["units_sold"], 0);
+        const qty = numeric["units_sold"] ?? 0;
         const existing = sales.get(key);
         const product = products.get(sku)!;
         sales.set(key, {
@@ -180,8 +317,14 @@ export const csvConnector: Connector<string> = {
           quantity: (existing?.quantity ?? 0) + qty,
           revenue: (existing?.revenue ?? 0) + qty * product.unitCost * 1.35,
         });
+        }
       } else if (row["month"]) {
-        issues.push({ row: i + 1, field: "month", message: `Unrecognised date "${row["month"]}".` });
+        issues.push({
+          row: i + 1,
+          field: "month",
+          message: `Unrecognised date "${row["month"]}". Sales for this row were not counted.`,
+          severity: "warning",
+        });
       }
     }
 
@@ -194,6 +337,12 @@ export const csvConnector: Connector<string> = {
       },
       issues,
       rowsParsed,
+      stats: {
+        rowsRead: totalRows,
+        rowsAccepted: rowsParsed,
+        rowsRejected,
+        warnings: issues.filter((i) => i.severity === "warning").length,
+      },
     };
   },
 };
