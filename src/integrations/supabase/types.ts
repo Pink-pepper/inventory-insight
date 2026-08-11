@@ -344,6 +344,8 @@ export type Database = {
           reason: string
           recommended_qty: number
           reorder_point: number
+          run_id: string | null
+          run_started_at: string | null
           safety_stock: number
         }
         Insert: {
@@ -359,6 +361,8 @@ export type Database = {
           reason?: string
           recommended_qty?: number
           reorder_point?: number
+          run_id?: string | null
+          run_started_at?: string | null
           safety_stock?: number
         }
         Update: {
@@ -374,6 +378,8 @@ export type Database = {
           reason?: string
           recommended_qty?: number
           reorder_point?: number
+          run_id?: string | null
+          run_started_at?: string | null
           safety_stock?: number
         }
         Relationships: [
