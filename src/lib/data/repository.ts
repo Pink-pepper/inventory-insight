@@ -207,9 +207,12 @@ export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSk
     const positions = positionsByProduct.get(p.id) ?? [];
     // No invented lead time: if neither the product nor the supplier declares
     // one, it stays null and the engine reports it as a data-quality block.
-    const leadTimeDays = p.lead_time_days ?? supplier?.lead_time_days ?? null;
+    const productLead = p.lead_time_days && p.lead_time_days > 0 ? p.lead_time_days : null;
+    const supplierLead =
+      supplier?.lead_time_days && supplier.lead_time_days > 0 ? supplier.lead_time_days : null;
+    const leadTimeDays = productLead ?? supplierLead;
     const leadTimeSource: SkuSignal["leadTimeSource"] =
-      p.lead_time_days != null ? "product" : supplier?.lead_time_days != null ? "supplier" : "missing";
+      productLead != null ? "product" : supplierLead != null ? "supplier" : "missing";
     return {
       productId: p.id,
       sku: p.sku,

@@ -13,6 +13,7 @@ export const CSV_TEMPLATE_HEADERS = [
   "safety_stock_days",
   "on_hand",
   "on_order",
+  "location",
   "month",
   "units_sold",
 ] as const;
@@ -32,6 +33,7 @@ const ALIASES: Record<string, string[]> = {
   on_order: ["on_order", "qty_on_order", "incoming"],
   month: ["month", "period", "sales_month", "date"],
   units_sold: ["units_sold", "qty_sold", "sales_qty", "demand"],
+  location: ["location", "warehouse", "site", "store"],
 };
 
 function splitLine(line: string): string[] {
@@ -60,12 +62,6 @@ function normaliseHeader(raw: string): string | null {
     if (aliases.includes(key)) return canonical;
   }
   return null;
-}
-
-function num(value: string | undefined, fallback = 0): number {
-  if (value == null || value === "") return fallback;
-  const parsed = Number(value.replace(/[$,\s]/g, ""));
-  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 /** Parses a numeric cell, distinguishing "absent" from "not a number". */
@@ -288,7 +284,7 @@ export const csvConnector: Connector<string> = {
       const location = row["location"] || "MAIN";
       const invKey = `${sku}|${location}`;
       if (!inventory.has(invKey) && numeric["on_hand"] != null) {
-        inventory.set(sku, {
+        inventory.set(invKey, {
           sku,
           onHand: numeric["on_hand"],
           onOrder: numeric["on_order"] ?? 0,
