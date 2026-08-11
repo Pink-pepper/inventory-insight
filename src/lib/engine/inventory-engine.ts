@@ -21,6 +21,27 @@ export const ENGINE_CONFIG = {
   stockoutRiskCoverDays: 0,
 } as const;
 
+/** A missing or implausible input that limits confidence in the recommendation. */
+export interface DataQualityIssue {
+  field: string;
+  message: string;
+  /** blocking = a reliable recommendation cannot be produced at all. */
+  blocking: boolean;
+}
+
+/**
+ * Structured, presentation-ready explanation. The engine owns every number in
+ * here; the UI only lays it out.
+ */
+export interface Explanation {
+  headline: string;
+  why: string;
+  demand: string[];
+  inventory: string[];
+  policy: string[];
+  spend: string | null;
+}
+
 export interface SkuMetrics {
   avgMonthlyDemand: number;
   avgDailyDemand: number;
@@ -42,6 +63,10 @@ export interface SkuRecommendation extends SkuMetrics {
   estimatedCost: number;
   reason: string;
   stockoutRisk: boolean;
+  dataQuality: DataQualityIssue[];
+  /** True when a required input is missing and no order quantity can be trusted. */
+  blocked: boolean;
+  explanation: Explanation;
 }
 
 const round = (n: number, dp = 2) => Math.round(n * 10 ** dp) / 10 ** dp;
@@ -70,19 +95,64 @@ export function demandTrendPct(monthlySales: SkuSignal["monthlySales"]): number 
   return ((avg(recent) - base) / base) * 100;
 }
 
+/** Inspects the raw inputs. Nothing is invented — gaps are reported, not filled. */
+export function assessDataQuality(signal: SkuSignal): DataQualityIssue[] {
+  const issues: DataQualityIssue[] = [];
+  if (signal.leadTimeDays == null || signal.leadTimeDays <= 0) {
+    issues.push({
+      field: "leadTimeDays",
+      message:
+        "Supplier lead time is missing. A reorder point cannot be calculated until it is provided.",
+      blocking: true,
+    });
+  }
+  if (!(signal.unitCost > 0)) {
+    issues.push({
+      field: "unitCost",
+      message: "Unit cost is missing, so estimated spend and inventory value cannot be valued.",
+      blocking: false,
+    });
+  }
+  if (signal.monthlySales.length === 0) {
+    issues.push({
+      field: "monthlySales",
+      message: "No sales history for this SKU, so demand cannot be measured.",
+      blocking: false,
+    });
+  }
+  if (signal.supplierName === "Unassigned") {
+    issues.push({
+      field: "supplier",
+      message: "No supplier is assigned, so ordering terms cannot be applied.",
+      blocking: false,
+    });
+  }
+  if (signal.locations.length > 1) {
+    issues.push({
+      field: "location",
+      message: `Stock is held across ${signal.locations.length} locations. Ionic plans on the aggregate position and does not optimise allocation between locations.`,
+      blocking: false,
+    });
+  }
+  return issues;
+}
+
 export function computeMetrics(signal: SkuSignal): SkuMetrics {
   const avgMonthly = averageMonthlyDemand(signal.monthlySales);
   const avgDaily = avgMonthly / ENGINE_CONFIG.daysPerMonth;
+  const leadTime = signal.leadTimeDays;
   const netAvailable = signal.onHand + signal.onOrder;
   const daysOfCover = avgDaily > 0 ? signal.onHand / avgDaily : signal.onHand > 0 ? Infinity : 0;
   const safetyStock = avgDaily * signal.safetyStockDays;
-  const reorderPoint = avgDaily * signal.leadTimeDays + safetyStock;
+  const reorderPoint = leadTime == null ? 0 : avgDaily * leadTime + safetyStock;
   const targetStock =
-    avgDaily * (signal.leadTimeDays + ENGINE_CONFIG.reviewPeriodDays + signal.safetyStockDays);
+    leadTime == null
+      ? 0
+      : avgDaily * (leadTime + ENGINE_CONFIG.reviewPeriodDays + signal.safetyStockDays);
   const excessThreshold =
     avgDaily *
-    (signal.leadTimeDays + signal.safetyStockDays + ENGINE_CONFIG.excessCoverThresholdDays);
-  const excessUnits = Math.max(0, netAvailable - excessThreshold);
+    ((leadTime ?? 0) + signal.safetyStockDays + ENGINE_CONFIG.excessCoverThresholdDays);
+  const excessUnits = leadTime == null ? 0 : Math.max(0, netAvailable - excessThreshold);
   const inventoryValue = signal.onHand * signal.unitCost;
 
   return {
@@ -108,6 +178,9 @@ export function applyMoq(rawQty: number, moq: number): number {
 }
 
 export function classify(signal: SkuSignal, m: SkuMetrics): RecommendationAction {
+  // Without a lead time there is no defensible reorder point, so the SKU is
+  // surfaced for attention rather than given a false purchase instruction.
+  if (signal.leadTimeDays == null || signal.leadTimeDays <= 0) return "WATCH";
   if (m.avgDailyDemand <= 0) {
     return signal.onHand > 0 ? "EXCESS" : "HOLD";
   }
@@ -121,12 +194,115 @@ function money(n: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
+const units = (n: number) => `${Math.round(n).toLocaleString("en-US")} units`;
+
+/** Shared demand / inventory / policy facts used by every explanation. */
+function facts(signal: SkuSignal, m: SkuMetrics) {
+  const demand: string[] = [
+    m.avgMonthlyDemand > 0
+      ? `Average demand: ${m.avgMonthlyDemand.toLocaleString("en-US")} units/month`
+      : "Average demand: no recorded sales in the demand window",
+    `Recent demand trend: ${m.demandTrendPct > 0 ? "+" : ""}${m.demandTrendPct}% (informational only, it does not change the quantity)`,
+  ];
+
+  const inventory: string[] = [`${units(signal.onHand)} on hand (physically available)`];
+  if (signal.onOrder > 0) {
+    inventory.push(
+      `${units(signal.onOrder)} on order (not yet received${
+        signal.expectedArrival ? `, earliest expected ${signal.expectedArrival}` : ""
+      })`,
+    );
+  } else {
+    inventory.push("No stock currently on order");
+  }
+  if (signal.locations.length > 1) {
+    inventory.push(
+      `Held across ${signal.locations.length} locations: ${signal.locations
+        .map((l) => `${l.location} ${Math.round(l.onHand)}`)
+        .join(", ")}`,
+    );
+  }
+
+  const policy: string[] = [
+    `${ENGINE_CONFIG.reviewPeriodDays}-day review period`,
+    `${signal.safetyStockDays}-day safety stock (${units(m.safetyStock)})`,
+    signal.leadTimeDays == null
+      ? "Supplier lead time: not provided"
+      : `${signal.leadTimeDays}-day supplier lead time`,
+    `Minimum order quantity: ${units(signal.minOrderQty)}`,
+  ];
+
+  return { demand, inventory, policy };
+}
+
+export function buildExplanation(
+  signal: SkuSignal,
+  m: SkuMetrics,
+  action: RecommendationAction,
+  qty: number,
+  blocked: boolean,
+): Explanation {
+  const base = facts(signal, m);
+  const coverText =
+    m.daysOfCover >= 9999 ? "no measurable demand" : `${Math.round(m.daysOfCover)} days of cover`;
+
+  if (blocked) {
+    return {
+      headline: "DATA REQUIRED",
+      why: "Supplier lead time is missing, so a reliable reorder recommendation cannot be calculated for this SKU.",
+      ...base,
+      spend: null,
+    };
+  }
+
+  switch (action) {
+    case "REORDER":
+      return {
+        headline: `ORDER ${units(qty).toUpperCase()}`,
+        why: `${Math.round(m.daysOfCover)} days of cover on hand against a ${signal.leadTimeDays}-day supplier lead time. Available stock of ${units(m.netAvailable)} has reached the reorder point of ${units(m.reorderPoint)}.`,
+        ...base,
+        spend: money(m.excessValue >= 0 ? qty * signal.unitCost : 0),
+      };
+    case "WATCH":
+      return {
+        headline: "MONITOR",
+        why: `${units(m.netAvailable)} available gives ${coverText}, still above the reorder point of ${units(m.reorderPoint)} but within ${Math.round((ENGINE_CONFIG.watchBufferRatio - 1) * 100)}% of it. No purchase today.`,
+        ...base,
+        spend: null,
+      };
+    case "EXCESS":
+      return {
+        headline: "DO NOT REORDER",
+        why:
+          m.avgDailyDemand <= 0
+            ? `No recorded demand in the last ${ENGINE_CONFIG.demandWindowMonths} months while ${units(signal.onHand)} remain on hand, tying up ${money(m.inventoryValue)}.`
+            : `${units(m.excessUnits)} are surplus to the ${ENGINE_CONFIG.excessCoverThresholdDays}-day forward requirement, about ${money(m.excessValue)} of working capital.`,
+        ...base,
+        spend: null,
+      };
+    default:
+      return {
+        headline: "NO ACTION",
+        why: `${units(m.netAvailable)} available gives ${coverText}, comfortably above the reorder point of ${units(m.reorderPoint)}.`,
+        ...base,
+        spend: null,
+      };
+  }
+}
+
 export function explain(
   signal: SkuSignal,
   m: SkuMetrics,
   action: RecommendationAction,
   qty: number,
 ): string {
+  if (signal.leadTimeDays == null || signal.leadTimeDays <= 0) {
+    return (
+      `Unable to calculate a reliable reorder recommendation until supplier lead time is provided. ` +
+      `${signal.onHand} units are on hand and ${signal.onOrder} units are on order against average demand of ` +
+      `${m.avgMonthlyDemand} units per month.`
+    );
+  }
   const cover = m.daysOfCover >= 9999 ? "no measurable demand" : `${Math.round(m.daysOfCover)} days of cover`;
   const moqNote =
     qty > 0 && qty > Math.max(0, m.targetStock - m.netAvailable)
@@ -178,12 +354,17 @@ export function explain(
 
 export function evaluateSku(signal: SkuSignal): SkuRecommendation {
   const metrics = computeMetrics(signal);
+  const dataQuality = assessDataQuality(signal);
+  const blocked = dataQuality.some((i) => i.blocking);
   const action = classify(signal, metrics);
-  const rawQty = action === "REORDER" ? Math.max(0, metrics.targetStock - metrics.netAvailable) : 0;
+  const rawQty =
+    action === "REORDER" && !blocked ? Math.max(0, metrics.targetStock - metrics.netAvailable) : 0;
   const recommendedQty = applyMoq(rawQty, signal.minOrderQty);
   const estimatedCost = round(recommendedQty * signal.unitCost);
   const stockoutRisk =
-    metrics.avgDailyDemand > 0 && metrics.daysOfCover < signal.leadTimeDays;
+    metrics.avgDailyDemand > 0 &&
+    signal.leadTimeDays != null &&
+    metrics.daysOfCover < signal.leadTimeDays;
 
   return {
     ...metrics,
@@ -192,6 +373,9 @@ export function evaluateSku(signal: SkuSignal): SkuRecommendation {
     recommendedQty,
     estimatedCost,
     stockoutRisk,
+    dataQuality,
+    blocked,
+    explanation: buildExplanation(signal, metrics, action, recommendedQty, blocked),
     reason: explain(signal, metrics, action, recommendedQty),
   };
 }
