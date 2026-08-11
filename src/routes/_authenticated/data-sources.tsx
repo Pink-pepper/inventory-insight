@@ -3,12 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload, Sparkles, Plug, Loader2 } from "lucide-react";
+import { Upload, Database as DatabaseIcon, Plug, Loader2 } from "lucide-react";
 import { AppShell, useWorkspace } from "@/components/app-shell";
 import { Pill } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { getAuditLog, ingestDataset } from "@/lib/ionic.functions";
 import { num } from "@/lib/format";
+import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 
 export const Route = createFileRoute("/_authenticated/data-sources")({
   head: () => ({
@@ -41,15 +42,18 @@ function DataSourcesPage() {
   const { data: workspace } = useWorkspace();
   const { data: auditLog } = useQuery({ queryKey: ["audit"], queryFn: () => auditFn() });
   const [busy, setBusy] = useState<"demo" | "csv" | null>(null);
-  const [issues, setIssues] = useState<{ row: number; field: string; message: string }[]>([]);
+  const [issues, setIssues] = useState<IngestionIssue[]>([]);
+  const [stats, setStats] = useState<IngestionStats | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function run(kind: "demo" | "csv", payload: { filename?: string; content?: string } = {}) {
     setBusy(kind);
     setIssues([]);
+    setStats(null);
     try {
       const res = await ingest({ data: { source: kind, ...payload } });
       setIssues(res.issues);
+      setStats(res.stats);
       await queryClient.invalidateQueries();
       toast.success(
         `Ingested ${num(res.products)} products and ${num(res.sales)} sales rows · ${num(res.evaluated)} SKUs evaluated`,
@@ -120,7 +124,7 @@ function DataSourcesPage() {
 
           <section className="panel p-5">
             <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-primary" />
+              <DatabaseIcon className="size-4 text-primary" />
               <h2 className="text-sm font-semibold">Demo dataset</h2>
             </div>
             <p className="mt-1.5 text-sm text-muted-foreground">
@@ -133,9 +137,9 @@ function DataSourcesPage() {
                 {busy === "demo" ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Sparkles className="size-3.5" />
+                  <DatabaseIcon className="size-3.5" />
                 )}
-                Load demo data
+                {busy === "demo" ? "Loading" : "Load demo data"}
               </Button>
               <Button asChild size="sm" variant="ghost">
                 <Link to="/overview">Open overview</Link>
@@ -144,18 +148,65 @@ function DataSourcesPage() {
           </section>
         </div>
 
-        {issues.length > 0 ? (
-          <section className="panel border-status-watch/40 p-4">
-            <h3 className="text-sm font-semibold text-status-watch">
-              {issues.length} rows were skipped or corrected
-            </h3>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-              {issues.map((i, idx) => (
-                <li key={idx}>
-                  Row {i.row} · {i.field}: {i.message}
-                </li>
-              ))}
-            </ul>
+        {stats ? (
+          <section className="panel p-4">
+            <h3 className="text-sm font-semibold">Import result</h3>
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Rows read</p>
+                <p className="mt-0.5 text-lg font-semibold tabular">{num(stats.rowsRead)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Accepted</p>
+                <p className="mt-0.5 text-lg font-semibold tabular text-status-hold">
+                  {num(stats.rowsAccepted)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Rejected</p>
+                <p className="mt-0.5 text-lg font-semibold tabular text-status-reorder">
+                  {num(stats.rowsRejected)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Warnings</p>
+                <p className="mt-0.5 text-lg font-semibold tabular text-status-watch">
+                  {num(stats.warnings)}
+                </p>
+              </div>
+            </div>
+            {issues.length > 0 ? (
+              <div className="mt-4 max-h-72 overflow-y-auto rounded-md border border-border">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-surface-muted">
+                    <tr className="text-left uppercase tracking-wide text-muted-foreground">
+                      <th className="px-3 py-2 font-medium">Row</th>
+                      <th className="px-3 py-2 font-medium">Field</th>
+                      <th className="px-3 py-2 font-medium">Severity</th>
+                      <th className="px-3 py-2 font-medium">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {issues.map((i, idx) => (
+                      <tr key={idx} className="border-t border-border/70">
+                        <td className="px-3 py-1.5 tabular">{i.row}</td>
+                        <td className="px-3 py-1.5 font-mono">{i.field}</td>
+                        <td className="px-3 py-1.5">
+                          <Pill tone={i.severity === "error" ? "reorder" : "watch"}>
+                            {i.severity === "error" ? "Rejected" : "Warning"}
+                          </Pill>
+                        </td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{i.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                No validation problems were found in this file.
+              </p>
+            )}
           </section>
         ) : null}
 
