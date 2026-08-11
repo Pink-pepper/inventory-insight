@@ -1,15 +1,27 @@
 import type { CanonicalDataset, ConnectorType } from "@/lib/domain/model";
 
+/** error = the row was rejected. warning = the row was accepted with a caveat. */
+export type IssueSeverity = "error" | "warning";
+
 export interface IngestionIssue {
   row: number;
   field: string;
   message: string;
+  severity: IssueSeverity;
+}
+
+export interface IngestionStats {
+  rowsRead: number;
+  rowsAccepted: number;
+  rowsRejected: number;
+  warnings: number;
 }
 
 export interface ConnectorResult {
   dataset: CanonicalDataset;
   issues: IngestionIssue[];
   rowsParsed: number;
+  stats: IngestionStats;
 }
 
 /**
