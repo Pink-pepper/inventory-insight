@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, ChevronDown, Loader2, RefreshCw } from "lucide-react";
 import { AppShell, EmptyState, TableSkeleton } from "@/components/app-shell";
@@ -252,11 +252,8 @@ function RecommendationsPage() {
                 {rows.map((r) => {
                   const open = expanded === r.sku;
                   return (
-                    <>
-                      <tr
-                        key={r.sku}
-                        className="border-t border-border/70 transition-colors duration-150 hover:bg-surface-muted/60"
-                      >
+                    <Fragment key={r.sku}>
+                      <tr className="border-t border-border/70 transition-colors duration-150 hover:bg-surface-muted/60">
                         <td className="px-3 py-2.5 font-mono text-xs">
                           <Link
                             to="/sku/$sku"
@@ -313,13 +310,13 @@ function RecommendationsPage() {
                         </td>
                       </tr>
                       {open ? (
-                        <tr key={`${r.sku}-detail`} className="border-t border-border/70">
+                        <tr className="border-t border-border/70">
                           <td colSpan={11} className="p-0">
                             <DecisionDetail row={r} />
                           </td>
                         </tr>
                       ) : null}
-                    </>
+                    </Fragment>
                   );
                 })}
                 {rows.length === 0 ? (
