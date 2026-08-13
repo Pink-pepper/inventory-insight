@@ -20,24 +20,24 @@ export type Database = {
           detail: Json
           event: string
           id: string
-          org_id: string | null
-          user_id: string | null
+          org_id: string
+          user_id: string
         }
         Insert: {
           created_at?: string
           detail?: Json
           event: string
           id?: string
-          org_id?: string | null
-          user_id?: string | null
+          org_id: string
+          user_id: string
         }
         Update: {
           created_at?: string
           detail?: Json
           event?: string
           id?: string
-          org_id?: string | null
-          user_id?: string | null
+          org_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -130,11 +130,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "inventory_product_id_fkey"
-            columns: ["product_id"]
+            foreignKeyName: "inventory_org_product_fkey"
+            columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["org_id", "id"]
           },
         ]
       }
@@ -243,11 +243,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "products_supplier_id_fkey"
-            columns: ["supplier_id"]
+            foreignKeyName: "products_org_supplier_fkey"
+            columns: ["org_id", "supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
-            referencedColumns: ["id"]
+            referencedColumns: ["org_id", "id"]
           },
         ]
       }
@@ -315,18 +315,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "purchase_orders_product_id_fkey"
-            columns: ["product_id"]
+            foreignKeyName: "purchase_orders_org_product_fkey"
+            columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["org_id", "id"]
           },
           {
-            foreignKeyName: "purchase_orders_supplier_id_fkey"
-            columns: ["supplier_id"]
+            foreignKeyName: "purchase_orders_org_supplier_fkey"
+            columns: ["org_id", "supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
-            referencedColumns: ["id"]
+            referencedColumns: ["org_id", "id"]
           },
         ]
       }
@@ -391,11 +391,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "recommendations_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
+            foreignKeyName: "recommendations_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: true
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["org_id", "id"]
           },
         ]
       }
@@ -433,11 +433,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "sales_product_id_fkey"
-            columns: ["product_id"]
+            foreignKeyName: "sales_org_product_fkey"
+            columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
+            referencedColumns: ["org_id", "id"]
           },
         ]
       }
