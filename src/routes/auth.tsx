@@ -123,19 +123,7 @@ function AuthPage() {
     toast.success("If that email has an Ionic account, a reset link is on its way.");
   }
 
-  async function googleUnused() {
-    setBusy(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      setBusy(false);
-      toast.error("Google sign-in failed. Try email instead.");
-      return;
-    }
-    if (result.redirected) return;
-    navigate({ to: "/overview", replace: true });
-  }
+
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
