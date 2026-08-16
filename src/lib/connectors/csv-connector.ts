@@ -174,14 +174,23 @@ export const csvConnector: Connector<string> = {
     const seenRowBySku = new Map<string, number>();
     const today = new Date().toISOString().slice(0, 10);
 
-    for (let i = 1; i < lines.length; i++) {
+    if (rowLimitHit) {
+      issues.push({
+        row: MAX_ROWS + 1,
+        field: "file",
+        message: `File contains ${totalRows} data rows. Only the first ${MAX_ROWS} were processed.`,
+        severity: "warning",
+      });
+    }
+
+    for (let i = 1; i <= lastLine; i++) {
       const cells = splitLine(lines[i]!);
       const row: Record<string, string> = {};
       headers.forEach((h, idx) => {
         if (h) row[h] = cells[idx] ?? "";
       });
 
-      const sku = row["sku"];
+      const sku = safeText(row["sku"]);
       if (!sku) {
         issues.push({
           row: i + 1,
@@ -189,6 +198,10 @@ export const csvConnector: Connector<string> = {
           message: "Missing SKU. Row rejected.",
           severity: "error",
         });
+        rowsRejected++;
+        continue;
+      }
+      if (!products.has(sku) && products.size >= MAX_SKUS) {
         rowsRejected++;
         continue;
       }
@@ -216,6 +229,18 @@ export const csvConnector: Connector<string> = {
             row: i + 1,
             field,
             message: `Negative value (${v}) is not valid for ${field.replace(/_/g, " ")}. Row rejected.`,
+            severity: "error",
+          });
+          rejected = true;
+        }
+      }
+      for (const field of ["unit_cost", "on_hand", "on_order", "units_sold", "lead_time_days", "moq", "safety_stock_days"] as const) {
+        const v = numeric[field];
+        if (v != null && Math.abs(v) > MAX_NUMBER) {
+          issues.push({
+            row: i + 1,
+            field,
+            message: `Value for ${field.replace(/_/g, " ")} is outside the supported range. Row rejected.`,
             severity: "error",
           });
           rejected = true;
@@ -253,9 +278,11 @@ export const csvConnector: Connector<string> = {
 
       rowsParsed++;
 
-      const supplierName = row["supplier_name"] || "Unassigned supplier";
+      const supplierName = safeText(row["supplier_name"], "Unassigned supplier");
       const supplierCode =
-        row["supplier_code"] || supplierName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "UNASSIGNED";
+        safeText(row["supplier_code"]).toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 32) ||
+        supplierName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) ||
+        "UNASSIGNED";
       // No invented lead time: absent stays absent all the way to the engine.
       const leadTime =
         numeric["lead_time_days"] != null ? Math.max(1, Math.round(numeric["lead_time_days"])) : null;
@@ -277,8 +304,8 @@ export const csvConnector: Connector<string> = {
         seenRowBySku.set(sku, i + 1);
         products.set(sku, {
           sku,
-          name: row["product_name"] || sku,
-          category: row["category"] || "Uncategorised",
+          name: safeText(row["product_name"], sku),
+          category: safeText(row["category"], "Uncategorised"),
           unitCost: numeric["unit_cost"] ?? 0,
           supplierCode,
           leadTimeDays: leadTime,
@@ -300,7 +327,7 @@ export const csvConnector: Connector<string> = {
         }
       }
 
-      const location = row["location"] || "MAIN";
+      const location = safeText(row["location"], "MAIN");
       const invKey = `${sku}|${location}`;
       if (!inventory.has(invKey) && numeric["on_hand"] != null) {
         inventory.set(invKey, {
