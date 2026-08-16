@@ -37,6 +37,23 @@ const ALIASES: Record<string, string[]> = {
 };
 
 function splitLine(line: string): string[] {
+  return splitLineImpl(line);
+}
+
+/** Ingestion guard rails. Bound work and stored value sizes regardless of input. */
+const MAX_ROWS = 50_000;
+const MAX_SKUS = 20_000;
+const MAX_ISSUES = 500;
+const MAX_TEXT = 120;
+const MAX_NUMBER = 1e9;
+
+/** Trims a free-text cell to a storable length and strips control characters. */
+function safeText(value: string | undefined, fallback = ""): string {
+  const cleaned = (value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  return (cleaned === "" ? fallback : cleaned).slice(0, MAX_TEXT);
+}
+
+function splitLineImpl(line: string): string[] {
   const out: string[] = [];
   let cur = "";
   let quoted = false;
@@ -107,6 +124,8 @@ export const csvConnector: Connector<string> = {
     const rawHeaders = splitLine(lines[0]!);
     const headers = rawHeaders.map(normaliseHeader);
     const totalRows = lines.length - 1;
+    const rowLimitHit = totalRows > MAX_ROWS;
+    const lastLine = rowLimitHit ? MAX_ROWS + 1 : lines.length - 1;
     if (!headers.includes("sku")) {
       return {
         dataset: { suppliers: [], products: [], inventory: [], sales: [] },
