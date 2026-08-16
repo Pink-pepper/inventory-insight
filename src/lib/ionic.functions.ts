@@ -56,7 +56,10 @@ export const ingestDataset = createServerFn({ method: "POST" })
     let label = "Demo dataset";
 
     if (data.source === "csv") {
-      const filename = data.filename ?? "upload.csv";
+      // Never trust the client filename: take the basename only, strip control
+      // characters and bound the length before it is stored or displayed.
+      const rawName = (data.filename ?? "upload.csv").split(/[\\/]/).pop() ?? "upload.csv";
+      const filename = rawName.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) || "upload.csv";
       if (!/\.csv$/i.test(filename)) throw new Error("Only .csv files are supported.");
       if (!data.content) throw new Error("The uploaded file was empty.");
       const bytes = new TextEncoder().encode(data.content).byteLength;
