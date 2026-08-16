@@ -109,6 +109,13 @@ export const csvConnector: Connector<string> = {
   label: "CSV upload",
   parse(text: string): ConnectorResult {
     const issues: IngestionIssue[] = [];
+    // Bound the report so a pathological file cannot grow issues without limit.
+    let warningCount = 0;
+    issues.push = function (...items: IngestionIssue[]) {
+      warningCount += items.filter((i) => i.severity === "warning").length;
+      const room = Math.max(0, MAX_ISSUES - this.length);
+      return Array.prototype.push.apply(this, items.slice(0, room));
+    };
     const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
     if (lines.length < 2) {
       return {
@@ -383,7 +390,7 @@ export const csvConnector: Connector<string> = {
         rowsRead: totalRows,
         rowsAccepted: rowsParsed,
         rowsRejected,
-        warnings: issues.filter((i) => i.severity === "warning").length,
+        warnings: warningCount,
       },
     };
   },
