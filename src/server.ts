@@ -44,18 +44,38 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// Baseline transport/response hardening. Deliberately no frame-ancestors or
+// X-Frame-Options: the app is rendered inside the Lovable preview iframe.
+// No CSP is set here either — a strict policy would need nonce plumbing for
+// SSR inline scripts, so it stays a deployment-layer decision.
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  headers.set("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  headers.set("x-dns-prefetch-control", "off");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
       console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return withSecurityHeaders(
+        new Response(renderErrorPage(), {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      );
     }
   },
 };
