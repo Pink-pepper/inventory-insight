@@ -247,14 +247,6 @@ export const updatePlanningPolicy = createServerFn({ method: "POST" })
     return saved;
   });
 
-export const getAuditLogLegacyUnused = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const { orgId } = await resolveOrg(supabase, userId);
-    return listAuditEvents(supabase, orgId, 50);
-  });
-
 export const recordLogin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
