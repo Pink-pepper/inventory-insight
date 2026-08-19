@@ -22,6 +22,8 @@ Security follows the existing pattern exactly: `GRANT` to `authenticated` and `s
 
 No formula, classification threshold or explanation wording changes. Policy values the current formulas do not consume yet (service level, variability, seasonality, horizon, growth) are stored and validated but explicitly not wired into maths in this package.
 
+For any planning-policy parameter that is persisted but not consumed by the current engine in Package 1, clearly distinguish it as a stored/future planning parameter and do not present it in the UI as if it currently changes recommendation calculations. The implementation must not create a misleading expectation that unsupported parameters are already active.
+
 ## 3. Configuration flow
 
 ```text
