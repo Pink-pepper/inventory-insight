@@ -6,6 +6,7 @@ import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
   buildRecommendationView,
+  getEffectivePolicy,
   getLastRun,
   getProfile,
   listAuditEvents,
@@ -13,6 +14,7 @@ import {
   persistDataset,
   regenerateRecommendations,
   resolveOrg,
+  savePlanningPolicy,
 } from "@/lib/data/repository";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 import { summarise } from "@/lib/analytics/summary";
@@ -22,9 +24,10 @@ export const getWorkspace = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { org, role, orgId } = await resolveOrg(supabase, userId);
-    const [profile, dataSources, { count }] = await Promise.all([
+    const [profile, dataSources, planningPolicy, { count }] = await Promise.all([
       getProfile(supabase, userId),
       listDataSources(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
       supabase.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId),
     ]);
     return {
@@ -32,6 +35,7 @@ export const getWorkspace = createServerFn({ method: "GET" })
       role,
       profile,
       dataSources,
+      planningPolicy,
       productCount: count ?? 0,
     };
   });
