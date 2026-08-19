@@ -1,6 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import type { CanonicalDataset, InventoryPosition, SkuSignal } from "@/lib/domain/model";
+import type {
+  AuditEvent,
+  CanonicalDataset,
+  ConnectorType,
+  DataSource,
+  InventoryPosition,
+  Organization,
+  RunProvenance,
+  SkuSignal,
+  UserProfile,
+} from "@/lib/domain/model";
 import { evaluateAll } from "@/lib/engine/inventory-engine";
 
 export type Db = SupabaseClient<Database>;
@@ -26,7 +36,59 @@ export async function resolveOrg(supabase: Db, userId: string) {
     slug: string;
     created_at: string;
   };
-  return { orgId: org.id, org, role: data.role };
+  const organization: Organization = { id: org.id, name: org.name, slug: org.slug };
+  return { orgId: org.id, org: organization, role: data.role };
+}
+
+/** The signed-in user's profile, mapped out of the storage row shape. */
+export async function getProfile(supabase: Db, userId: string): Promise<UserProfile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return { name: data?.full_name ?? "", email: data?.email ?? "" };
+}
+
+/** Ingestion sources for a workspace, as domain objects. */
+export async function listDataSources(supabase: Db, orgId: string): Promise<DataSource[]> {
+  const { data, error } = await supabase
+    .from("data_sources")
+    .select("id, name, connector, status, last_sync_at, rows_ingested, error_count")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    connector: row.connector as ConnectorType,
+    status: row.status,
+    lastSyncAt: row.last_sync_at,
+    rowsIngested: row.rows_ingested ?? 0,
+    errorCount: row.error_count ?? 0,
+  }));
+}
+
+/** Recent workspace activity, as domain objects. */
+export async function listAuditEvents(
+  supabase: Db,
+  orgId: string,
+  limit = 50,
+): Promise<AuditEvent[]> {
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, event, detail, created_at")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    event: row.event,
+    detail: (row.detail ?? {}) as Record<string, unknown>,
+    occurredAt: row.created_at,
+  }));
 }
 
 export async function audit(
@@ -276,7 +338,7 @@ export async function regenerateRecommendations(supabase: Db, orgId: string) {
 }
 
 /** Provenance of the most recent stored run, for the "when was this generated" question. */
-export async function getLastRun(supabase: Db, orgId: string) {
+export async function getLastRun(supabase: Db, orgId: string): Promise<RunProvenance | null> {
   const { data, error } = await supabase
     .from("recommendations")
     .select("run_id, run_started_at, generated_at")
