@@ -391,9 +391,10 @@ export async function loadSignals(
 
 /** Runs the decision engine over the tenant's canonical data and stores results. */
 export async function regenerateRecommendations(supabase: Db, orgId: string) {
-  const signals = await loadSignals(supabase, orgId);
+  const policy = await getPlanningPolicy(supabase, orgId);
+  const signals = await loadSignals(supabase, orgId, policy);
   const bySku = new Map(signals.map((s) => [s.sku, s]));
-  const results = evaluateAll(signals);
+  const results = evaluateAll(signals, resolveEngineConfig(policy));
 
   // Provenance: one run id per regeneration, stamped on every row it produced.
   const runId = crypto.randomUUID();
@@ -450,8 +451,9 @@ export async function getLastRun(supabase: Db, orgId: string): Promise<RunProven
 
 /** Joins stored signals with engine output for presentation. */
 export async function buildRecommendationView(supabase: Db, orgId: string) {
-  const signals = await loadSignals(supabase, orgId);
-  const results = evaluateAll(signals);
+  const policy = await getPlanningPolicy(supabase, orgId);
+  const signals = await loadSignals(supabase, orgId, policy);
+  const results = evaluateAll(signals, resolveEngineConfig(policy));
   const signalBySku = new Map(signals.map((s) => [s.sku, s]));
   return results.map((r) => {
     const s = signalBySku.get(r.sku)!;
