@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type {
+  AuditDetailValue,
   AuditEvent,
   CanonicalDataset,
   ConnectorType,
@@ -86,7 +87,7 @@ export async function listAuditEvents(
   return (data ?? []).map((row) => ({
     id: row.id,
     event: row.event,
-    detail: (row.detail ?? {}) as Record<string, unknown>,
+    detail: (row.detail ?? {}) as Record<string, AuditDetailValue>,
     occurredAt: row.created_at,
   }));
 }
