@@ -1,0 +1,192 @@
+import type { SheetTable } from "./sheet-table";
+
+/**
+ * What a sheet is understood to contain. Detection is a suggestion only —
+ * the user always confirms before anything is written.
+ */
+export type EntityKind =
+  | "combined"
+  | "products"
+  | "suppliers"
+  | "inventory"
+  | "sales_monthly"
+  | "transactions"
+  | "customers"
+  | "channels"
+  | "ignored";
+
+export interface EntityDefinition {
+  kind: EntityKind;
+  label: string;
+  description: string;
+  /** Canonical fields that must be mapped before the sheet can be imported. */
+  required: string[];
+  /** Canonical fields the sheet may also provide. */
+  optional: string[];
+}
+
+/** Alternative column names accepted from other systems, per canonical field. */
+export const FIELD_ALIASES: Record<string, string[]> = {
+  sku: ["sku", "item_code", "item", "product_code", "material", "material_number", "part_number", "product_sku"],
+  product_name: ["product_name", "name", "description", "product", "item_name", "item_description"],
+  category: ["category", "product_group", "family", "product_category", "group"],
+  unit_cost: ["unit_cost", "cost", "standard_cost", "cost_price", "buy_price"],
+  unit_price: ["unit_price", "selling_price", "sell_price", "list_price", "price"],
+  supplier_name: ["supplier_name", "supplier", "vendor", "vendor_name"],
+  supplier_code: ["supplier_code", "vendor_code", "supplier_id", "vendor_id"],
+  lead_time_days: ["lead_time_days", "lead_time", "leadtime", "lead_time_in_days"],
+  moq: ["moq", "min_order_qty", "minimum_order_quantity", "min_qty"],
+  reliability: ["reliability", "otif", "on_time_rate", "service_rate"],
+  safety_stock_days: ["safety_stock_days", "safety_days"],
+  on_hand: ["on_hand", "qty_on_hand", "stock", "quantity_on_hand", "inventory", "closing_stock"],
+  on_order: ["on_order", "qty_on_order", "incoming", "open_po_qty"],
+  as_of: ["as_of", "as_of_date", "stock_date", "snapshot_date"],
+  location: ["location", "warehouse", "site", "store", "branch", "depot"],
+  region: ["region", "zone", "territory"],
+  state_province: ["state", "province", "state_province"],
+  country: ["country", "country_code"],
+  month: ["month", "period", "sales_month", "period_month"],
+  units_sold: ["units_sold", "qty_sold", "sales_qty", "demand", "quantity_sold"],
+  revenue: ["revenue", "sales_value", "net_sales", "turnover", "amount", "value", "line_total"],
+  cogs: ["cogs", "cost_of_goods", "cost_of_sales", "total_cost"],
+  transaction_date: ["date", "transaction_date", "order_date", "invoice_date", "posting_date", "document_date", "sales_date"],
+  quantity: ["quantity", "qty", "units", "qty_sold", "units_sold", "demand"],
+  customer_ref: ["customer_id", "customer_code", "customer_ref", "account_number", "account_code"],
+  customer_name: ["customer_name", "customer", "account_name", "client", "buyer"],
+  segment: ["segment", "customer_segment", "tier", "customer_type"],
+  channel_code: ["channel_code", "channel_id"],
+  channel_name: ["channel_name", "channel", "sales_channel", "route_to_market"],
+  currency_code: ["currency", "currency_code", "ccy"],
+  original_amount: ["original_amount", "amount_original", "document_amount", "local_amount"],
+  source_ref: ["source_ref", "document_no", "document_number", "invoice_no", "invoice_number", "order_no", "order_number", "line_id", "transaction_id"],
+};
+
+export const ENTITY_DEFINITIONS: EntityDefinition[] = [
+  {
+    kind: "combined",
+    label: "Combined inventory & sales",
+    description: "One row per SKU and month, carrying product, stock and demand columns together.",
+    required: ["sku"],
+    optional: ["product_name", "category", "unit_cost", "supplier_name", "supplier_code", "lead_time_days", "moq", "safety_stock_days", "on_hand", "on_order", "location", "month", "units_sold"],
+  },
+  {
+    kind: "products",
+    label: "Products",
+    description: "The item master: SKU, description, category, cost and ordering terms.",
+    required: ["sku"],
+    optional: ["product_name", "category", "unit_cost", "unit_price", "supplier_code", "supplier_name", "lead_time_days", "moq", "safety_stock_days"],
+  },
+  {
+    kind: "suppliers",
+    label: "Suppliers",
+    description: "Vendor master: name, code, lead time and ordering minimums.",
+    required: ["supplier_name"],
+    optional: ["supplier_code", "lead_time_days", "moq", "reliability"],
+  },
+  {
+    kind: "inventory",
+    label: "Inventory positions",
+    description: "Stock on hand and on order, optionally by location.",
+    required: ["sku", "on_hand"],
+    optional: ["on_order", "location", "as_of", "region", "state_province", "country"],
+  },
+  {
+    kind: "sales_monthly",
+    label: "Monthly sales history",
+    description: "One row per SKU and month with quantity sold.",
+    required: ["sku", "month", "units_sold"],
+    optional: ["revenue", "cogs"],
+  },
+  {
+    kind: "transactions",
+    label: "Sales transactions",
+    description: "Day-level demand lines, optionally by customer, channel and location.",
+    required: ["sku", "transaction_date", "quantity"],
+    optional: ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code", "channel_name", "location", "region", "state_province", "currency_code", "original_amount", "source_ref"],
+  },
+  {
+    kind: "customers",
+    label: "Customers",
+    description: "Customer master: reference, name and segment.",
+    required: ["customer_name"],
+    optional: ["customer_ref", "segment"],
+  },
+  {
+    kind: "channels",
+    label: "Channels",
+    description: "Sales channel or route-to-market master.",
+    required: ["channel_name"],
+    optional: ["channel_code"],
+  },
+];
+
+export function definitionFor(kind: EntityKind): EntityDefinition | null {
+  return ENTITY_DEFINITIONS.find((d) => d.kind === kind) ?? null;
+}
+
+/** Header text → comparable key. Case, spacing and punctuation are ignored. */
+export function headerKey(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[\s.\-/]+/g, "_").replace(/[^a-z0-9_]/g, "").replace(/_+/g, "_").replace(/^_|_$/g, "");
+}
+
+/** Canonical field a header most likely refers to, or null when unrecognised. */
+export function canonicalField(raw: string, allowed: string[]): string | null {
+  const key = headerKey(raw);
+  if (key === "") return null;
+  for (const field of allowed) {
+    if (field === key) return field;
+    if (FIELD_ALIASES[field]?.includes(key)) return field;
+  }
+  return null;
+}
+
+/** A confirmed column mapping: canonical field → column index in the sheet. */
+export type ColumnMapping = Record<string, number>;
+
+export interface SheetSuggestion {
+  kind: EntityKind;
+  confidence: number;
+  mapping: ColumnMapping;
+  unmappedHeaders: string[];
+  missingRequired: string[];
+}
+
+function score(sheet: SheetTable, def: EntityDefinition): SheetSuggestion {
+  const fields = [...def.required, ...def.optional];
+  const mapping: ColumnMapping = {};
+  const unmapped: string[] = [];
+  sheet.headers.forEach((header, index) => {
+    if (header.trim() === "") return;
+    const field = canonicalField(header, fields);
+    if (field && !(field in mapping)) mapping[field] = index;
+    else if (!field) unmapped.push(header);
+  });
+  const missingRequired = def.required.filter((f) => !(f in mapping));
+  const matched = Object.keys(mapping).length;
+  const requiredHit = def.required.length - missingRequired.length;
+  const confidence = missingRequired.length > 0 ? 0 : requiredHit * 2 + matched;
+  return { kind: def.kind, confidence, mapping, unmappedHeaders: unmapped, missingRequired };
+}
+
+/**
+ * Best-guess entity for a sheet, with the columns it recognised. Combined
+ * sheets win only when they carry both stock and demand columns, so a plain
+ * product master is not mistaken for one.
+ */
+export function suggestSheet(sheet: SheetTable): SheetSuggestion {
+  if (sheet.headers.length === 0 || sheet.rows.length === 0) {
+    return { kind: "ignored", confidence: 0, mapping: {}, unmappedHeaders: [], missingRequired: [] };
+  }
+  const scored = ENTITY_DEFINITIONS.map((def) => score(sheet, def));
+  const byKind = new Map(scored.map((s) => [s.kind, s]));
+  const combined = byKind.get("combined")!;
+  const hasStock = "on_hand" in combined.mapping;
+  const hasDemand = "units_sold" in combined.mapping && "month" in combined.mapping;
+  if (combined.confidence > 0 && hasStock && hasDemand) return combined;
+
+  const best = scored
+    .filter((s) => s.kind !== "combined" && s.confidence > 0)
+    .sort((a, b) => b.confidence - a.confidence)[0];
+  if (best) return best;
+  return { kind: "ignored", confidence: 0, mapping: {}, unmappedHeaders: sheet.headers.filter((h) => h.trim() !== ""), missingRequired: [] };
+}

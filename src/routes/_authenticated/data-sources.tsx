@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Upload, Database as DatabaseIcon, Plug, Loader2 } from "lucide-react";
+import { Database as DatabaseIcon, Plug, Loader2 } from "lucide-react";
 import { AppShell, useWorkspace } from "@/components/app-shell";
+import { ImportWizard } from "@/components/import-wizard";
 import { Pill } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { getAuditLog, ingestDataset } from "@/lib/ionic.functions";
@@ -18,12 +19,12 @@ export const Route = createFileRoute("/_authenticated/data-sources")({
       {
         name: "description",
         content:
-          "Upload a CSV extract or load the demo dataset. Every source maps into Ionic's canonical inventory model.",
+          "Upload a CSV or Excel extract, or load the demo dataset. Every source maps into Ionic's canonical inventory model.",
       },
       { property: "og:title", content: "Data sources & connectors — Ionic" },
       {
         property: "og:description",
-        content: "CSV upload today, ERP connectors next — all normalized into one internal model.",
+        content: "CSV and Excel today, ERP connectors next — all normalized into one internal model.",
       },
     ],
   }),
@@ -32,26 +33,22 @@ export const Route = createFileRoute("/_authenticated/data-sources")({
 
 const PLANNED = ["Odoo", "SAP Business One", "Microsoft Dynamics", "NetSuite", "Custom API"];
 
-const TEMPLATE = `sku,product_name,category,supplier,supplier_lead_time_days,min_order_qty,unit_cost,on_hand,on_order,safety_stock_days,period_month,units_sold
-SKU-1001,Hex Bolt M8,Fasteners,Northwind Supply,21,100,1.85,420,0,14,2025-01-01,310`;
-
 function DataSourcesPage() {
   const ingest = useServerFn(ingestDataset);
   const auditFn = useServerFn(getAuditLog);
   const queryClient = useQueryClient();
   const { data: workspace } = useWorkspace();
   const { data: auditLog } = useQuery({ queryKey: ["audit"], queryFn: () => auditFn() });
-  const [busy, setBusy] = useState<"demo" | "csv" | null>(null);
+  const [busy, setBusy] = useState<"demo" | null>(null);
   const [issues, setIssues] = useState<IngestionIssue[]>([]);
   const [stats, setStats] = useState<IngestionStats | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
-  async function run(kind: "demo" | "csv", payload: { filename?: string; content?: string } = {}) {
-    setBusy(kind);
+  async function run() {
+    setBusy("demo");
     setIssues([]);
     setStats(null);
     try {
-      const res = await ingest({ data: { source: kind, ...payload } });
+      const res = await ingest({ data: { source: "demo" } });
       setIssues(res.issues);
       setStats(res.stats);
       await queryClient.invalidateQueries();
@@ -62,21 +59,7 @@ function DataSourcesPage() {
       toast.error(e instanceof Error ? e.message : "Ingestion failed");
     } finally {
       setBusy(null);
-      if (fileRef.current) fileRef.current.value = "";
     }
-  }
-
-  async function onFile(file: File): Promise<void> {
-    if (!/\.csv$/i.test(file.name)) {
-      toast.error("Please choose a .csv file.");
-      return;
-    }
-    if (file.size > 5_000_000) {
-      toast.error("File exceeds the 5 MB limit.");
-      return;
-    }
-    const content = await file.text();
-    await run("csv", { filename: file.name, content });
   }
 
   return (
@@ -85,43 +68,9 @@ function DataSourcesPage() {
       description="Connect the systems that describe your stock. Everything is normalized into Ionic's canonical model."
     >
       <div className="space-y-4">
-        <div className="grid gap-3 lg:grid-cols-2">
-          <section className="panel p-5">
-            <div className="flex items-center gap-2">
-              <Upload className="size-4 text-primary" />
-              <h2 className="text-sm font-semibold">CSV upload</h2>
-            </div>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              One row per SKU per month. Column names are matched flexibly (for example{" "}
-              <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">qty_on_hand</code>,{" "}
-              <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">stock</code> and{" "}
-              <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">on_hand</code> all map to the
-              same canonical field).
-            </p>
-            <pre className="mt-3 overflow-x-auto rounded-md border border-border bg-surface-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-              {TEMPLATE}
-            </pre>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onFile(f);
-              }}
-            />
-            <Button
-              className="mt-4"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy !== null}
-            >
-              {busy === "csv" ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-              Upload CSV
-            </Button>
-          </section>
+        <ImportWizard />
 
+        <div className="grid gap-3">
           <section className="panel p-5">
             <div className="flex items-center gap-2">
               <DatabaseIcon className="size-4 text-primary" />
@@ -133,7 +82,7 @@ function DataSourcesPage() {
               deliberate stockout risks and overstock positions.
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => run("demo")} disabled={busy !== null}>
+              <Button size="sm" variant="outline" onClick={() => run()} disabled={busy !== null}>
                 {busy === "demo" ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (

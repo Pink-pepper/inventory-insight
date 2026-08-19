@@ -51,12 +51,52 @@ export interface CanonicalSale {
   cogs?: number | null;
 }
 
+/** A customer as any source describes it. */
+export interface CanonicalCustomer {
+  externalRef: string;
+  name: string;
+  segment?: string | null;
+}
+
+/** A route to market as any source describes it. */
+export interface CanonicalChannel {
+  code: string;
+  name: string;
+}
+
+/**
+ * A single demand line at day grain. The finest fact Ionic stores; monthly
+ * sales are derived from these when transactions are supplied.
+ */
+export interface CanonicalTransaction {
+  sku: string;
+  occurredOn: string; // ISO date
+  quantity: number;
+  value?: number | null;
+  unitPrice?: number | null;
+  cogs?: number | null;
+  customerRef?: string | null;
+  channelCode?: string | null;
+  location?: string | null;
+  region?: string | null;
+  stateProvince?: string | null;
+  currencyCode?: string | null;
+  originalAmount?: number | null;
+  /** Document/line identifier from the source system, when present. */
+  sourceRef?: string | null;
+  /** Deterministic fingerprint of the business fields, for re-import detection. */
+  rowHash: string;
+}
+
 /** A complete ingestion payload produced by any connector. */
 export interface CanonicalDataset {
   suppliers: CanonicalSupplier[];
   products: CanonicalProduct[];
   inventory: CanonicalInventory[];
   sales: CanonicalSale[];
+  customers?: CanonicalCustomer[];
+  channels?: CanonicalChannel[];
+  transactions?: CanonicalTransaction[];
 }
 
 /** A stock position at a single physical location. */

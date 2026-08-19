@@ -49,6 +49,73 @@ export type Database = {
           },
         ]
       }
+      channels: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          created_at: string
+          external_ref: string
+          id: string
+          name: string
+          org_id: string
+          segment: string | null
+        }
+        Insert: {
+          created_at?: string
+          external_ref: string
+          id?: string
+          name: string
+          org_id: string
+          segment?: string | null
+        }
+        Update: {
+          created_at?: string
+          external_ref?: string
+          id?: string
+          name?: string
+          org_id?: string
+          segment?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_sources: {
         Row: {
           connector: Database["public"]["Enums"]["connector_type"]
@@ -86,6 +153,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "data_sources_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      import_batches: {
+        Row: {
+          created_at: string
+          created_by: string
+          filename: string
+          id: string
+          org_id: string
+          rows_accepted: number
+          rows_read: number
+          rows_rejected: number
+          sheet_summary: Json
+          source: string
+          status: string
+          warnings: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          filename: string
+          id?: string
+          org_id: string
+          rows_accepted?: number
+          rows_read?: number
+          rows_rejected?: number
+          sheet_summary?: Json
+          source?: string
+          status?: string
+          warnings?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          filename?: string
+          id?: string
+          org_id?: string
+          rows_accepted?: number
+          rows_read?: number
+          rows_rejected?: number
+          sheet_summary?: Json
+          source?: string
+          status?: string
+          warnings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_batches_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -571,6 +691,115 @@ export type Database = {
           },
           {
             foreignKeyName: "sales_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      sales_transactions: {
+        Row: {
+          channel_id: string | null
+          cogs: number | null
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          id: string
+          import_batch_id: string | null
+          location_id: string | null
+          occurred_on: string
+          org_id: string
+          original_amount: number | null
+          product_id: string
+          quantity: number
+          region: string | null
+          source_ref: string | null
+          source_row_hash: string
+          state_province: string | null
+          unit_price: number | null
+          value: number | null
+        }
+        Insert: {
+          channel_id?: string | null
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          occurred_on: string
+          org_id: string
+          original_amount?: number | null
+          product_id: string
+          quantity?: number
+          region?: string | null
+          source_ref?: string | null
+          source_row_hash: string
+          state_province?: string | null
+          unit_price?: number | null
+          value?: number | null
+        }
+        Update: {
+          channel_id?: string | null
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          occurred_on?: string
+          org_id?: string
+          original_amount?: number | null
+          product_id?: string
+          quantity?: number
+          region?: string | null
+          source_ref?: string | null
+          source_row_hash?: string
+          state_province?: string | null
+          unit_price?: number | null
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_transactions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_channel_fkey"
+            columns: ["org_id", "channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_customer_fkey"
+            columns: ["org_id", "customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_product_fkey"
             columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
