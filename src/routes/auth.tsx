@@ -41,6 +41,7 @@ function AuthPage() {
   const [company, setCompany] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -100,6 +101,29 @@ function AuthPage() {
     if (result.redirected) return;
     navigate({ to: "/overview", replace: true });
   }
+
+  async function forgotPassword() {
+    const parsed = z.string().trim().email().max(255).safeParse(email);
+    if (!parsed.success) {
+      toast.error("Enter your work email first, then choose 'Forgot password'.");
+      return;
+    }
+    setRecovering(true);
+    // Supabase issues and validates the recovery token; Ionic never generates
+    // or stores password material of its own.
+    const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setRecovering(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    // Neutral message: never reveals whether the address has an account.
+    toast.success("If that email has an Ionic account, a reset link is on its way.");
+  }
+
+
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
@@ -186,7 +210,19 @@ function AuthPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === "signin" ? (
+                  <button
+                    type="button"
+                    onClick={forgotPassword}
+                    disabled={recovering}
+                    className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    {recovering ? "Sending…" : "Forgot password?"}
+                  </button>
+                ) : null}
+              </div>
               <Input
                 id="password"
                 type="password"

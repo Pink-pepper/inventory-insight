@@ -7,6 +7,9 @@ import {
   audit,
   buildRecommendationView,
   getLastRun,
+  getProfile,
+  listAuditEvents,
+  listDataSources,
   persistDataset,
   regenerateRecommendations,
   resolveOrg,
@@ -19,20 +22,16 @@ export const getWorkspace = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { org, role, orgId } = await resolveOrg(supabase, userId);
-    const [{ data: profile }, { data: sources }, { count }] = await Promise.all([
-      supabase.from("profiles").select("full_name, email").eq("id", userId).maybeSingle(),
-      supabase
-        .from("data_sources")
-        .select("id, name, connector, status, last_sync_at, rows_ingested, error_count")
-        .eq("org_id", orgId)
-        .order("created_at", { ascending: false }),
+    const [profile, dataSources, { count }] = await Promise.all([
+      getProfile(supabase, userId),
+      listDataSources(supabase, orgId),
       supabase.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId),
     ]);
     return {
-      org: { id: org.id, name: org.name, slug: org.slug },
+      org,
       role,
-      profile: { name: profile?.full_name ?? "", email: profile?.email ?? "" },
-      dataSources: sources ?? [],
+      profile,
+      dataSources,
       productCount: count ?? 0,
     };
   });
@@ -56,7 +55,10 @@ export const ingestDataset = createServerFn({ method: "POST" })
     let label = "Demo dataset";
 
     if (data.source === "csv") {
-      const filename = data.filename ?? "upload.csv";
+      // Never trust the client filename: take the basename only, strip control
+      // characters and bound the length before it is stored or displayed.
+      const rawName = (data.filename ?? "upload.csv").split(/[\\/]/).pop() ?? "upload.csv";
+      const filename = rawName.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) || "upload.csv";
       if (!/\.csv$/i.test(filename)) throw new Error("Only .csv files are supported.");
       if (!data.content) throw new Error("The uploaded file was empty.");
       const bytes = new TextEncoder().encode(data.content).byteLength;
@@ -187,14 +189,7 @@ export const getAuditLog = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
-    const { data, error } = await supabase
-      .from("audit_logs")
-      .select("id, event, detail, created_at")
-      .eq("org_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) throw new Error(error.message);
-    return data ?? [];
+    return listAuditEvents(supabase, orgId, 50);
   });
 
 export const recordLogin = createServerFn({ method: "POST" })

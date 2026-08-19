@@ -221,9 +221,9 @@ function DataSourcesPage() {
                 <Pill tone="hold">{s.status}</Pill>
                 <span className="text-xs uppercase text-muted-foreground">{s.connector}</span>
                 <span className="ml-auto text-xs text-muted-foreground tabular">
-                  {num(s.rows_ingested ?? 0)} rows
-                  {s.error_count ? ` · ${s.error_count} issues` : ""}
-                  {s.last_sync_at ? ` · ${new Date(s.last_sync_at).toLocaleString()}` : ""}
+                  {num(s.rowsIngested)} rows
+                  {s.errorCount ? ` · ${s.errorCount} issues` : ""}
+                  {s.lastSyncAt ? ` · ${new Date(s.lastSyncAt).toLocaleString()}` : ""}
                 </span>
               </div>
             ))}
@@ -265,7 +265,7 @@ function DataSourcesPage() {
               <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 text-xs">
                 <span className="font-mono text-muted-foreground">{a.event}</span>
                 <span className="ml-auto text-muted-foreground tabular">
-                  {new Date(a.created_at).toLocaleString()}
+                  {new Date(a.occurredAt).toLocaleString()}
                 </span>
               </div>
             ))}

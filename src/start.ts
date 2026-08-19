@@ -7,6 +7,11 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
     return await next();
   } catch (error) {
+    // Auth middleware rejects with a Response (401). Preserve it instead of
+    // masking the authorization failure as a generic 500.
+    if (error instanceof Response) {
+      throw error;
+    }
     if (error != null && typeof error === "object" && "statusCode" in error) {
       throw error;
     }

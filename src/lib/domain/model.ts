@@ -67,6 +67,64 @@ export interface InventoryPosition {
 /** Where a lead time came from, so the UI never implies precision it does not have. */
 export type LeadTimeSource = "product" | "supplier" | "missing";
 
+/** Application-level roles within a workspace. */
+export type OrgRole = "owner" | "admin" | "member";
+
+/** A tenant workspace as the application talks about it. */
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/** The signed-in person, in application terms. */
+export interface UserProfile {
+  name: string;
+  email: string;
+}
+
+/** A configured ingestion source, independent of how it is stored. */
+export interface DataSource {
+  id: string;
+  name: string;
+  connector: ConnectorType;
+  status: string;
+  lastSyncAt: string | null;
+  rowsIngested: number;
+  errorCount: number;
+}
+
+/** Values an audit entry may carry; JSON-serialisable by construction. */
+export type AuditDetailValue = string | number | boolean | null;
+
+/** An append-only workspace activity entry. */
+export interface AuditEvent {
+  id: string;
+  event: string;
+  detail: Record<string, AuditDetailValue>;
+  occurredAt: string;
+}
+
+export type PurchaseOrderStatus = "draft" | "placed" | "received" | "cancelled";
+
+/** An inbound order against a SKU. */
+export interface PurchaseOrder {
+  id: string;
+  sku: string | null;
+  supplierName: string | null;
+  quantity: number;
+  unitCost: number;
+  status: PurchaseOrderStatus;
+  expectedAt: string | null;
+}
+
+/** Provenance of a stored recommendation run. */
+export interface RunProvenance {
+  runId: string | null;
+  runStartedAt: string | null;
+  generatedAt: string;
+}
+
 /** Inputs the decision engine needs for a single SKU. */
 export interface SkuSignal {
   sku: string;
