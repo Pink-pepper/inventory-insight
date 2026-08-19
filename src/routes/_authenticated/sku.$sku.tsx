@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AppShell, EmptyState, Loading } from "@/components/app-shell";
+import { AppShell, EmptyState, Loading, useProductLabel } from "@/components/app-shell";
 import { AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
