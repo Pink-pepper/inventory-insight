@@ -6,17 +6,22 @@ import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
   buildRecommendationView,
+  createImportBatch,
   getEffectivePolicy,
   getLastRun,
   getProfile,
   listAuditEvents,
   listDataSources,
   persistDataset,
+  persistTransactions,
   regenerateRecommendations,
   resolveOrg,
   savePlanningPolicy,
 } from "@/lib/data/repository";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
+import { canonicalise, type SheetPlan } from "@/lib/ingestion/canonicalise";
+import { formatOf, inspectSheets, toSheets } from "@/lib/ingestion/inspect";
+import { LIMITS } from "@/lib/ingestion/sheet-table";
 import {
   EMPTY_PLANNING_POLICY,
   type PlanningPolicy,
@@ -258,4 +263,171 @@ export const recordLogin = createServerFn({ method: "POST" })
     const { orgId } = await resolveOrg(supabase, userId);
     await audit(supabase, orgId, userId, "auth.login", {});
     return { ok: true };
+  });
+
+/* ------------------------------------------------------------------ *
+ * Spreadsheet ingestion: inspect first, import only after confirmation
+ * ------------------------------------------------------------------ */
+
+const uploadInput = z.object({
+  filename: z.string().min(1).max(200),
+  encoding: z.enum(["text", "base64"]),
+  content: z.string().min(1).max(9_000_000),
+});
+
+const ENTITY_KINDS = [
+  "combined",
+  "products",
+  "suppliers",
+  "inventory",
+  "sales_monthly",
+  "transactions",
+  "customers",
+  "channels",
+  "ignored",
+] as const;
+
+const importInput = uploadInput.extend({
+  plans: z
+    .array(
+      z.object({
+        sheetName: z.string().min(1).max(200),
+        kind: z.enum(ENTITY_KINDS),
+        mapping: z.record(z.string().max(64), z.number().int().min(0).max(500)),
+      }),
+    )
+    .min(1)
+    .max(30),
+});
+
+/** Sanitises a client-supplied filename down to a safe basename. */
+function safeFilename(raw: string): string {
+  const base = raw.split(/[\\/]/).pop() ?? "upload";
+  const cleaned = base.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) || "upload";
+  if (!/\.(csv|xlsx)$/i.test(cleaned)) {
+    throw new Error("Only .csv and .xlsx files are supported.");
+  }
+  return cleaned;
+}
+
+/** Decodes the upload into the shape its source adapter needs, enforcing the size limit. */
+function decodeUpload(encoding: "text" | "base64", content: string) {
+  if (encoding === "base64") {
+    const binary = atob(content);
+    if (binary.length > LIMITS.maxBytes) throw new Error("File exceeds the 5 MB limit.");
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return { bytes };
+  }
+  if (new TextEncoder().encode(content).byteLength > LIMITS.maxBytes) {
+    throw new Error("File exceeds the 5 MB limit.");
+  }
+  return { text: content };
+}
+
+/**
+ * Step one: parse the upload in memory and report what was found. Nothing is
+ * written to the workspace and the file is never stored.
+ */
+export const inspectUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(uploadInput.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await resolveOrg(supabase, userId);
+    const filename = safeFilename(data.filename);
+    const payload = decodeUpload(data.encoding, data.content);
+    const format = formatOf(filename, payload.bytes);
+    const sheets = toSheets(format, payload);
+    return inspectSheets(filename, format, sheets);
+  });
+
+/**
+ * Step two: canonicalise the confirmed sheets and commit them. The
+ * organisation is derived server-side and every row is validated again here —
+ * the preview is never trusted as authorisation or as validated input.
+ */
+export const importUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(importInput.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filename = safeFilename(data.filename);
+    const payload = decodeUpload(data.encoding, data.content);
+    const format = formatOf(filename, payload.bytes);
+    const sheets = toSheets(format, payload);
+
+    const plans: SheetPlan[] = data.plans.filter((p) => sheets.some((s) => s.sheetName === p.sheetName));
+    if (plans.every((p) => p.kind === "ignored")) {
+      throw new Error("No sheets were selected for import.");
+    }
+
+    const result = canonicalise(sheets, plans);
+    if (
+      result.dataset.products.length === 0 &&
+      result.dataset.inventory.length === 0 &&
+      result.dataset.sales.length === 0 &&
+      (result.dataset.transactions?.length ?? 0) === 0
+    ) {
+      throw new Error(
+        result.issues.find((i) => i.severity === "error")?.message ??
+          "No valid rows were found in the selected sheets.",
+      );
+    }
+
+    const batchId = await createImportBatch(supabase, orgId, userId, {
+      source: format,
+      filename,
+      sheetSummary: plans.map((p) => ({
+        sheet: p.sheetName,
+        kind: p.kind,
+        rows: sheets.find((s) => s.sheetName === p.sheetName)?.rowCount ?? 0,
+      })),
+      rowsRead: result.stats.rowsRead,
+      rowsAccepted: result.stats.rowsAccepted,
+      rowsRejected: result.stats.rowsRejected,
+      warnings: result.stats.warnings,
+    });
+
+    const counts = await persistDataset(supabase, orgId, result.dataset);
+    const tx = await persistTransactions(supabase, orgId, result.dataset, batchId);
+
+    const { error: dsError } = await supabase.from("data_sources").insert({
+      org_id: orgId,
+      connector: "csv",
+      name: filename,
+      status: "active",
+      last_sync_at: new Date().toISOString(),
+      rows_ingested: result.stats.rowsAccepted,
+      error_count: result.stats.rowsRejected,
+    });
+    if (dsError) throw new Error(dsError.message);
+
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, "data.import", {
+      format,
+      filename,
+      batch_id: batchId,
+      sheets: plans.filter((p) => p.kind !== "ignored").length,
+      rows_accepted: result.stats.rowsAccepted,
+      rows_rejected: result.stats.rowsRejected,
+      transactions: tx.inserted,
+      duplicates: tx.duplicates,
+    });
+    await audit(supabase, orgId, userId, "recommendations.generated", {
+      evaluated: run.evaluated,
+      blocked: run.blocked,
+      run_id: run.runId,
+    });
+
+    return {
+      batchId,
+      ...counts,
+      transactions: tx,
+      issues: result.issues,
+      stats: result.stats,
+      evaluated: run.evaluated,
+      run,
+    };
   });

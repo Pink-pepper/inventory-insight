@@ -464,3 +464,221 @@ export async function buildRecommendationView(supabase: Db, orgId: string) {
 }
 
 export type RecommendationRow = Awaited<ReturnType<typeof buildRecommendationView>>[number];
+
+/** Metadata recorded for every spreadsheet import, so any row can be traced back. */
+export interface ImportBatchInput {
+  source: "csv" | "xlsx" | "demo";
+  filename: string;
+  sheetSummary: { sheet: string; kind: string; rows: number }[];
+  rowsRead: number;
+  rowsAccepted: number;
+  rowsRejected: number;
+  warnings: number;
+}
+
+/** Creates the provenance record an import's rows point at. */
+export async function createImportBatch(
+  supabase: Db,
+  orgId: string,
+  userId: string,
+  input: ImportBatchInput,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("import_batches")
+    .insert({
+      org_id: orgId,
+      created_by: userId,
+      source: input.source,
+      filename: input.filename,
+      sheet_summary: input.sheetSummary,
+      rows_read: input.rowsRead,
+      rows_accepted: input.rowsAccepted,
+      rows_rejected: input.rowsRejected,
+      warnings: input.warnings,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data.id;
+}
+
+type CustomerRow = Database["public"]["Tables"]["customers"]["Insert"];
+type ChannelRow = Database["public"]["Tables"]["channels"]["Insert"];
+type TransactionRow = Database["public"]["Tables"]["sales_transactions"]["Insert"];
+
+async function upsertCustomers(supabase: Db, rows: CustomerRow[]) {
+  for (const part of chunk(rows, 500)) {
+    const { error } = await supabase.from("customers").upsert(part, { onConflict: "org_id,external_ref" });
+    if (error) throw new Error(error.message);
+  }
+}
+
+async function upsertChannels(supabase: Db, rows: ChannelRow[]) {
+  for (const part of chunk(rows, 500)) {
+    const { error } = await supabase.from("channels").upsert(part, { onConflict: "org_id,code" });
+    if (error) throw new Error(error.message);
+  }
+}
+
+export interface TransactionPersistResult {
+  inserted: number;
+  duplicates: number;
+  unknownSkus: string[];
+  monthsRefreshed: number;
+}
+
+/**
+ * Writes day-grain demand lines and refreshes the monthly grain the planning
+ * engine reads. Rows whose fingerprint already exists are treated as a
+ * re-import and skipped rather than double counted.
+ */
+export async function persistTransactions(
+  supabase: Db,
+  orgId: string,
+  dataset: CanonicalDataset,
+  batchId: string | null,
+): Promise<TransactionPersistResult> {
+  const transactions = dataset.transactions ?? [];
+  if (transactions.length === 0) {
+    return { inserted: 0, duplicates: 0, unknownSkus: [], monthsRefreshed: 0 };
+  }
+
+  await upsertCustomers(
+    supabase,
+    (dataset.customers ?? []).map((c) => ({
+      org_id: orgId,
+      external_ref: c.externalRef,
+      name: c.name,
+      segment: c.segment ?? null,
+    })),
+  );
+  await upsertChannels(
+    supabase,
+    (dataset.channels ?? []).map((c) => ({ org_id: orgId, code: c.code, name: c.name })),
+  );
+
+  const [{ data: products, error: pErr }, { data: customers, error: cErr }, { data: channels, error: chErr }, { data: locations, error: lErr }] =
+    await Promise.all([
+      supabase.from("products").select("id, sku").eq("org_id", orgId),
+      supabase.from("customers").select("id, external_ref").eq("org_id", orgId),
+      supabase.from("channels").select("id, code").eq("org_id", orgId),
+      supabase.from("locations").select("id, code").eq("org_id", orgId),
+    ]);
+  if (pErr) throw new Error(pErr.message);
+  if (cErr) throw new Error(cErr.message);
+  if (chErr) throw new Error(chErr.message);
+  if (lErr) throw new Error(lErr.message);
+
+  const productIdBySku = new Map((products ?? []).map((p) => [p.sku, p.id]));
+  const customerIdByRef = new Map((customers ?? []).map((c) => [c.external_ref, c.id]));
+  const channelIdByCode = new Map((channels ?? []).map((c) => [c.code, c.id]));
+  const locationIdByCode = new Map((locations ?? []).map((l) => [l.code, l.id]));
+
+  // Re-import detection: a row whose fingerprint already exists is not written again.
+  const hashes = [...new Set(transactions.map((t) => t.rowHash))];
+  const existing = new Set<string>();
+  for (const part of chunk(hashes, 500)) {
+    const { data, error } = await supabase
+      .from("sales_transactions")
+      .select("source_row_hash")
+      .eq("org_id", orgId)
+      .in("source_row_hash", part);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) existing.add(row.source_row_hash);
+  }
+
+  const unknown = new Set<string>();
+  const seen = new Set<string>();
+  const affected = new Set<string>();
+  const rows: TransactionRow[] = [];
+  let duplicates = 0;
+
+  for (const tx of transactions) {
+    const productId = productIdBySku.get(tx.sku);
+    if (!productId) {
+      unknown.add(tx.sku);
+      continue;
+    }
+    if (existing.has(tx.rowHash) || seen.has(tx.rowHash)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(tx.rowHash);
+    affected.add(productId);
+    rows.push({
+      org_id: orgId,
+      product_id: productId,
+      occurred_on: tx.occurredOn,
+      quantity: tx.quantity,
+      value: tx.value ?? null,
+      unit_price: tx.unitPrice ?? null,
+      cogs: tx.cogs ?? null,
+      customer_id: tx.customerRef ? (customerIdByRef.get(tx.customerRef) ?? null) : null,
+      channel_id: tx.channelCode ? (channelIdByCode.get(tx.channelCode) ?? null) : null,
+      location_id: tx.location ? (locationIdByCode.get(tx.location) ?? null) : null,
+      region: tx.region ?? null,
+      state_province: tx.stateProvince ?? null,
+      currency_code: tx.currencyCode ?? null,
+      original_amount: tx.originalAmount ?? null,
+      source_ref: tx.sourceRef ?? null,
+      source_row_hash: tx.rowHash,
+      import_batch_id: batchId,
+    });
+  }
+
+  for (const part of chunk(rows, 500)) {
+    const { error } = await supabase.from("sales_transactions").insert(part);
+    if (error) throw new Error(error.message);
+  }
+
+  const monthsRefreshed = await refreshMonthlySales(supabase, orgId, [...affected]);
+  return { inserted: rows.length, duplicates, unknownSkus: [...unknown].slice(0, 25), monthsRefreshed };
+}
+
+/**
+ * Rebuilds the monthly `sales` grain from stored transactions for the given
+ * products. Monthly remains the engine's read path; transactions are the
+ * source of truth wherever they exist.
+ */
+export async function refreshMonthlySales(
+  supabase: Db,
+  orgId: string,
+  productIds: string[],
+): Promise<number> {
+  if (productIds.length === 0) return 0;
+  const totals = new Map<string, { productId: string; month: string; quantity: number; revenue: number; cogs: number | null }>();
+
+  for (const part of chunk(productIds, 100)) {
+    const { data, error } = await supabase
+      .from("sales_transactions")
+      .select("product_id, occurred_on, quantity, value, unit_price, cogs")
+      .eq("org_id", orgId)
+      .in("product_id", part);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      const month = `${row.occurred_on.slice(0, 7)}-01`;
+      const key = `${row.product_id}|${month}`;
+      const qty = Number(row.quantity);
+      const value = row.value != null ? Number(row.value) : row.unit_price != null ? Number(row.unit_price) * qty : 0;
+      const current = totals.get(key) ?? { productId: row.product_id, month, quantity: 0, revenue: 0, cogs: null };
+      current.quantity += qty;
+      current.revenue += value;
+      if (row.cogs != null) current.cogs = (current.cogs ?? 0) + Number(row.cogs);
+      totals.set(key, current);
+    }
+  }
+
+  const rows = [...totals.values()].map((t) => ({
+    org_id: orgId,
+    product_id: t.productId,
+    period_month: t.month,
+    quantity: t.quantity,
+    revenue: t.revenue,
+    ...(t.cogs == null ? {} : { cogs: t.cogs }),
+  }));
+  for (const part of chunk(rows, 500)) {
+    const { error } = await supabase.from("sales").upsert(part, { onConflict: "org_id,product_id,period_month" });
+    if (error) throw new Error(error.message);
+  }
+  return rows.length;
+}
