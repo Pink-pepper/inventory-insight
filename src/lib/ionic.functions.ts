@@ -6,6 +6,7 @@ import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
   buildRecommendationView,
+  getEffectivePolicy,
   getLastRun,
   getProfile,
   listAuditEvents,
@@ -13,8 +14,13 @@ import {
   persistDataset,
   regenerateRecommendations,
   resolveOrg,
+  savePlanningPolicy,
 } from "@/lib/data/repository";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
+import {
+  EMPTY_PLANNING_POLICY,
+  type PlanningPolicy,
+} from "@/lib/domain/planning-policy";
 import { summarise } from "@/lib/analytics/summary";
 
 export const getWorkspace = createServerFn({ method: "GET" })
@@ -22,9 +28,10 @@ export const getWorkspace = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { org, role, orgId } = await resolveOrg(supabase, userId);
-    const [profile, dataSources, { count }] = await Promise.all([
+    const [profile, dataSources, planningPolicy, { count }] = await Promise.all([
       getProfile(supabase, userId),
       listDataSources(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
       supabase.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId),
     ]);
     return {
@@ -32,6 +39,7 @@ export const getWorkspace = createServerFn({ method: "GET" })
       role,
       profile,
       dataSources,
+      planningPolicy,
       productCount: count ?? 0,
     };
   });
@@ -190,6 +198,57 @@ export const getAuditLog = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
     return listAuditEvents(supabase, orgId, 50);
+  });
+
+/** Nullable numeric policy input: null means "not configured". */
+const optNum = (max: number) => z.number().min(0).max(max).nullable().optional();
+
+const planningPolicyInput = z.object({
+  demandWindowMonths: z.number().int().min(1).max(60).nullable().optional(),
+  planningHorizonDays: z.number().int().min(1).max(730).nullable().optional(),
+  safetyStockDays: z.number().int().min(0).max(365).nullable().optional(),
+  defaultLeadTimeDays: z.number().int().min(0).max(730).nullable().optional(),
+  defaultMinOrderQty: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  orderMultiple: z.number().int().min(1).max(1_000_000).nullable().optional(),
+  reorderPointOverride: optNum(1_000_000_000),
+  minimumStockLevel: optNum(1_000_000_000),
+  targetStockLevel: optNum(1_000_000_000),
+  daysOfCoverTarget: optNum(3650),
+  serviceLevel: z.number().min(0).max(1).nullable().optional(),
+  demandMethod: z.literal("trailing_average").nullable().optional(),
+  demandGrowthPct: z.number().min(-100).max(1000).nullable().optional(),
+  seasonalityEnabled: z.boolean().nullable().optional(),
+  demandVariability: optNum(100),
+  leadTimeVariabilityDays: optNum(365),
+  productDisplay: z.enum(["sku", "name", "sku_name"]),
+});
+
+export const getPlanningPolicy = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    return getEffectivePolicy(supabase, orgId);
+  });
+
+export const updatePlanningPolicy = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(planningPolicyInput.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    // Defence in depth: RLS also restricts writes to owners and admins.
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change the planning policy.");
+    }
+    const merged = { ...EMPTY_PLANNING_POLICY, ...data } as PlanningPolicy;
+    const saved = await savePlanningPolicy(supabase, orgId, merged);
+    await audit(supabase, orgId, userId, "planning.policy.updated", {
+      product_display: saved.productDisplay,
+      demand_window_months: saved.demandWindowMonths,
+      planning_horizon_days: saved.planningHorizonDays,
+    });
+    return saved;
   });
 
 export const recordLogin = createServerFn({ method: "POST" })

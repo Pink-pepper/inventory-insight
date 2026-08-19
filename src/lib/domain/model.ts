@@ -24,6 +24,8 @@ export interface CanonicalProduct {
   name: string;
   category: string;
   unitCost: number;
+  /** Selling price, when the source provides it. Never invented. */
+  unitPrice?: number | null;
   supplierCode: string;
   leadTimeDays: number | null;
   minOrderQty: number | null;
@@ -45,6 +47,8 @@ export interface CanonicalSale {
   periodMonth: string; // ISO date, first of month
   quantity: number;
   revenue: number;
+  /** Cost of goods sold for the period, when the source provides it. */
+  cogs?: number | null;
 }
 
 /** A complete ingestion payload produced by any connector. */

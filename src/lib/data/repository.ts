@@ -12,7 +12,13 @@ import type {
   SkuSignal,
   UserProfile,
 } from "@/lib/domain/model";
-import { evaluateAll } from "@/lib/engine/inventory-engine";
+import {
+  EMPTY_PLANNING_POLICY,
+  type PlanningPolicy,
+  type ProductDisplay,
+  type DemandMethod,
+} from "@/lib/domain/planning-policy";
+import { evaluateAll, resolveEngineConfig } from "@/lib/engine/inventory-engine";
 
 export type Db = SupabaseClient<Database>;
 
@@ -143,6 +149,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
         name: p.name,
         category: p.category,
         unit_cost: p.unitCost,
+        ...(p.unitPrice == null ? {} : { unit_price: p.unitPrice }),
         supplier_id: supplierIdByCode.get(p.supplierCode) ?? null,
         lead_time_days: p.leadTimeDays,
         min_order_qty: p.minOrderQty,
@@ -185,6 +192,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
       period_month: s.periodMonth,
       quantity: s.quantity,
       revenue: s.revenue,
+      ...(s.cogs == null ? {} : { cogs: s.cogs }),
     }));
   for (const part of chunk(saleRows, 500)) {
     const { error } = await supabase
@@ -201,8 +209,88 @@ export interface LoadedSku extends SkuSignal {
   supplierCode: string;
 }
 
+const numOrNull = (v: unknown): number | null => (v == null ? null : Number(v));
+
+/**
+ * The organisation's planning policy, or null when it has never configured one.
+ * Null is meaningful: the engine then runs on its documented defaults.
+ */
+export async function getPlanningPolicy(
+  supabase: Db,
+  orgId: string,
+): Promise<PlanningPolicy | null> {
+  const { data, error } = await supabase
+    .from("planning_policies")
+    .select("*")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    demandWindowMonths: data.demand_window_months,
+    planningHorizonDays: data.planning_horizon_days,
+    safetyStockDays: data.safety_stock_days,
+    defaultLeadTimeDays: data.default_lead_time_days,
+    defaultMinOrderQty: data.default_min_order_qty,
+    orderMultiple: data.order_multiple,
+    reorderPointOverride: numOrNull(data.reorder_point_override),
+    minimumStockLevel: numOrNull(data.minimum_stock_level),
+    targetStockLevel: numOrNull(data.target_stock_level),
+    daysOfCoverTarget: numOrNull(data.days_of_cover_target),
+    serviceLevel: numOrNull(data.service_level),
+    demandMethod: (data.demand_method as DemandMethod | null) ?? null,
+    demandGrowthPct: numOrNull(data.demand_growth_pct),
+    seasonalityEnabled: data.seasonality_enabled,
+    demandVariability: numOrNull(data.demand_variability),
+    leadTimeVariabilityDays: numOrNull(data.lead_time_variability_days),
+    productDisplay: (data.product_display as ProductDisplay) ?? "sku_name",
+  };
+}
+
+/** The effective policy for display purposes: defaults when nothing is configured. */
+export async function getEffectivePolicy(supabase: Db, orgId: string): Promise<PlanningPolicy> {
+  return (await getPlanningPolicy(supabase, orgId)) ?? EMPTY_PLANNING_POLICY;
+}
+
+/** Creates or updates the tenant's policy. Role enforcement lives in RLS. */
+export async function savePlanningPolicy(
+  supabase: Db,
+  orgId: string,
+  policy: PlanningPolicy,
+): Promise<PlanningPolicy> {
+  const { error } = await supabase.from("planning_policies").upsert(
+    {
+      org_id: orgId,
+      demand_window_months: policy.demandWindowMonths,
+      planning_horizon_days: policy.planningHorizonDays,
+      safety_stock_days: policy.safetyStockDays,
+      default_lead_time_days: policy.defaultLeadTimeDays,
+      default_min_order_qty: policy.defaultMinOrderQty,
+      order_multiple: policy.orderMultiple,
+      reorder_point_override: policy.reorderPointOverride,
+      minimum_stock_level: policy.minimumStockLevel,
+      target_stock_level: policy.targetStockLevel,
+      days_of_cover_target: policy.daysOfCoverTarget,
+      service_level: policy.serviceLevel,
+      demand_method: policy.demandMethod,
+      demand_growth_pct: policy.demandGrowthPct,
+      seasonality_enabled: policy.seasonalityEnabled,
+      demand_variability: policy.demandVariability,
+      lead_time_variability_days: policy.leadTimeVariabilityDays,
+      product_display: policy.productDisplay,
+    },
+    { onConflict: "org_id" },
+  );
+  if (error) throw new Error(error.message);
+  return (await getPlanningPolicy(supabase, orgId)) ?? policy;
+}
+
 /** Reads the canonical model back out and shapes it for the decision engine. */
-export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSku[]> {
+export async function loadSignals(
+  supabase: Db,
+  orgId: string,
+  policy: PlanningPolicy | null = null,
+): Promise<LoadedSku[]> {
   const [
     { data: products, error: pErr },
     { data: inventory, error: iErr },
@@ -273,7 +361,13 @@ export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSk
     const productLead = p.lead_time_days && p.lead_time_days > 0 ? p.lead_time_days : null;
     const supplierLead =
       supplier?.lead_time_days && supplier.lead_time_days > 0 ? supplier.lead_time_days : null;
-    const leadTimeDays = productLead ?? supplierLead;
+    // Policy defaults are a last resort only: they never override a lead time
+    // that the product or supplier actually declares.
+    const policyLead =
+      policy?.defaultLeadTimeDays && policy.defaultLeadTimeDays > 0
+        ? policy.defaultLeadTimeDays
+        : null;
+    const leadTimeDays = productLead ?? supplierLead ?? policyLead;
     const leadTimeSource: SkuSignal["leadTimeSource"] =
       productLead != null ? "product" : supplierLead != null ? "supplier" : "missing";
     return {
@@ -286,8 +380,8 @@ export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSk
       supplierCode: supplier?.code ?? "—",
       leadTimeDays,
       leadTimeSource,
-      minOrderQty: p.min_order_qty ?? supplier?.min_order_qty ?? 1,
-      safetyStockDays: p.safety_stock_days,
+      minOrderQty: p.min_order_qty ?? supplier?.min_order_qty ?? policy?.defaultMinOrderQty ?? 1,
+      safetyStockDays: p.safety_stock_days ?? policy?.safetyStockDays ?? 0,
       onHand: positions.reduce((sum, l) => sum + l.onHand, 0),
       onOrder: positions.reduce((sum, l) => sum + l.onOrder, 0),
       locations: positions,
@@ -299,9 +393,10 @@ export async function loadSignals(supabase: Db, orgId: string): Promise<LoadedSk
 
 /** Runs the decision engine over the tenant's canonical data and stores results. */
 export async function regenerateRecommendations(supabase: Db, orgId: string) {
-  const signals = await loadSignals(supabase, orgId);
+  const policy = await getPlanningPolicy(supabase, orgId);
+  const signals = await loadSignals(supabase, orgId, policy);
   const bySku = new Map(signals.map((s) => [s.sku, s]));
-  const results = evaluateAll(signals);
+  const results = evaluateAll(signals, resolveEngineConfig(policy));
 
   // Provenance: one run id per regeneration, stamped on every row it produced.
   const runId = crypto.randomUUID();
@@ -358,8 +453,9 @@ export async function getLastRun(supabase: Db, orgId: string): Promise<RunProven
 
 /** Joins stored signals with engine output for presentation. */
 export async function buildRecommendationView(supabase: Db, orgId: string) {
-  const signals = await loadSignals(supabase, orgId);
-  const results = evaluateAll(signals);
+  const policy = await getPlanningPolicy(supabase, orgId);
+  const signals = await loadSignals(supabase, orgId, policy);
+  const results = evaluateAll(signals, resolveEngineConfig(policy));
   const signalBySku = new Map(signals.map((s) => [s.sku, s]));
   return results.map((r) => {
     const s = signalBySku.get(r.sku)!;
