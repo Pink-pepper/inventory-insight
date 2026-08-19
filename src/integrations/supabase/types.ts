@@ -98,6 +98,7 @@ export type Database = {
           as_of: string
           id: string
           location: string
+          location_id: string | null
           on_hand: number
           on_order: number
           org_id: string
@@ -107,6 +108,7 @@ export type Database = {
           as_of?: string
           id?: string
           location?: string
+          location_id?: string | null
           on_hand?: number
           on_order?: number
           org_id: string
@@ -116,6 +118,7 @@ export type Database = {
           as_of?: string
           id?: string
           location?: string
+          location_id?: string | null
           on_hand?: number
           on_order?: number
           org_id?: string
@@ -130,11 +133,59 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
             foreignKeyName: "inventory_org_product_fkey"
             columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          code: string
+          country: string | null
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+          region: string | null
+          state_province: string | null
+        }
+        Insert: {
+          code: string
+          country?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+          region?: string | null
+          state_province?: string | null
+        }
+        Update: {
+          code?: string
+          country?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+          region?: string | null
+          state_province?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -191,6 +242,86 @@ export type Database = {
         }
         Relationships: []
       }
+      planning_policies: {
+        Row: {
+          created_at: string
+          days_of_cover_target: number | null
+          default_lead_time_days: number | null
+          default_min_order_qty: number | null
+          demand_growth_pct: number | null
+          demand_method: string | null
+          demand_variability: number | null
+          demand_window_months: number | null
+          id: string
+          lead_time_variability_days: number | null
+          minimum_stock_level: number | null
+          order_multiple: number | null
+          org_id: string
+          planning_horizon_days: number | null
+          product_display: string
+          reorder_point_override: number | null
+          safety_stock_days: number | null
+          seasonality_enabled: boolean | null
+          service_level: number | null
+          target_stock_level: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          days_of_cover_target?: number | null
+          default_lead_time_days?: number | null
+          default_min_order_qty?: number | null
+          demand_growth_pct?: number | null
+          demand_method?: string | null
+          demand_variability?: number | null
+          demand_window_months?: number | null
+          id?: string
+          lead_time_variability_days?: number | null
+          minimum_stock_level?: number | null
+          order_multiple?: number | null
+          org_id: string
+          planning_horizon_days?: number | null
+          product_display?: string
+          reorder_point_override?: number | null
+          safety_stock_days?: number | null
+          seasonality_enabled?: boolean | null
+          service_level?: number | null
+          target_stock_level?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          days_of_cover_target?: number | null
+          default_lead_time_days?: number | null
+          default_min_order_qty?: number | null
+          demand_growth_pct?: number | null
+          demand_method?: string | null
+          demand_variability?: number | null
+          demand_window_months?: number | null
+          id?: string
+          lead_time_variability_days?: number | null
+          minimum_stock_level?: number | null
+          order_multiple?: number | null
+          org_id?: string
+          planning_horizon_days?: number | null
+          product_display?: string
+          reorder_point_override?: number | null
+          safety_stock_days?: number | null
+          seasonality_enabled?: boolean | null
+          service_level?: number | null
+          target_stock_level?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string
@@ -205,6 +336,7 @@ export type Database = {
           sku: string
           supplier_id: string | null
           unit_cost: number
+          unit_price: number | null
         }
         Insert: {
           category?: string
@@ -219,6 +351,7 @@ export type Database = {
           sku: string
           supplier_id?: string | null
           unit_cost?: number
+          unit_price?: number | null
         }
         Update: {
           category?: string
@@ -233,6 +366,7 @@ export type Database = {
           sku?: string
           supplier_id?: string | null
           unit_cost?: number
+          unit_price?: number | null
         }
         Relationships: [
           {
@@ -401,6 +535,7 @@ export type Database = {
       }
       sales: {
         Row: {
+          cogs: number | null
           id: string
           org_id: string
           period_month: string
@@ -409,6 +544,7 @@ export type Database = {
           revenue: number
         }
         Insert: {
+          cogs?: number | null
           id?: string
           org_id: string
           period_month: string
@@ -417,6 +553,7 @@ export type Database = {
           revenue?: number
         }
         Update: {
+          cogs?: number | null
           id?: string
           org_id?: string
           period_month?: string
