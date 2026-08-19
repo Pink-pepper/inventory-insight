@@ -25,7 +25,18 @@ const NAV = [
 
 export function useWorkspace() {
   const fn = useServerFn(getWorkspace);
-  return useQuery({ queryKey: ["workspace"], queryFn: () => fn() });
+  return useQuery({
+    queryKey: ["workspace"],
+    retry: false,
+    queryFn: async () => {
+      // The server function requires a bearer token. During sign-out (and
+      // before the Supabase session hydrates) there is none, so skip the call
+      // instead of surfacing a 401 as a fatal error boundary.
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return null;
+      return fn();
+    },
+  });
 }
 
 /**
