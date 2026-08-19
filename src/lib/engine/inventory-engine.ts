@@ -236,7 +236,7 @@ function money(n: number) {
 const units = (n: number) => `${Math.round(n).toLocaleString("en-US")} units`;
 
 /** Shared demand / inventory / policy facts used by every explanation. */
-function facts(signal: SkuSignal, m: SkuMetrics) {
+function facts(signal: SkuSignal, m: SkuMetrics, cfg: EngineConfig) {
   const demand: string[] = [
     m.avgMonthlyDemand > 0
       ? `Average demand: ${m.avgMonthlyDemand.toLocaleString("en-US")} units/month`
@@ -263,7 +263,7 @@ function facts(signal: SkuSignal, m: SkuMetrics) {
   }
 
   const policy: string[] = [
-    `${ENGINE_CONFIG.reviewPeriodDays}-day review period`,
+    `${cfg.reviewPeriodDays}-day review period`,
     `${signal.safetyStockDays}-day safety stock (${units(m.safetyStock)})`,
     signal.leadTimeDays == null
       ? "Supplier lead time: not provided"
@@ -280,8 +280,9 @@ export function buildExplanation(
   action: RecommendationAction,
   qty: number,
   blocked: boolean,
+  cfg: EngineConfig = DEFAULT_ENGINE_CONFIG,
 ): Explanation {
-  const base = facts(signal, m);
+  const base = facts(signal, m, cfg);
   const coverText =
     m.daysOfCover >= 9999 ? "no measurable demand" : `${Math.round(m.daysOfCover)} days of cover`;
 
@@ -305,7 +306,7 @@ export function buildExplanation(
     case "WATCH":
       return {
         headline: "MONITOR",
-        why: `${units(m.netAvailable)} available gives ${coverText}, still above the reorder point of ${units(m.reorderPoint)} but within ${Math.round((ENGINE_CONFIG.watchBufferRatio - 1) * 100)}% of it. No purchase today.`,
+        why: `${units(m.netAvailable)} available gives ${coverText}, still above the reorder point of ${units(m.reorderPoint)} but within ${Math.round((cfg.watchBufferRatio - 1) * 100)}% of it. No purchase today.`,
         ...base,
         spend: null,
       };
@@ -314,8 +315,8 @@ export function buildExplanation(
         headline: "DO NOT REORDER",
         why:
           m.avgDailyDemand <= 0
-            ? `No recorded demand in the last ${ENGINE_CONFIG.demandWindowMonths} months while ${units(signal.onHand)} remain on hand, tying up ${money(m.inventoryValue)}.`
-            : `${units(m.excessUnits)} are surplus to the ${ENGINE_CONFIG.excessCoverThresholdDays}-day forward requirement, about ${money(m.excessValue)} of working capital.`,
+            ? `No recorded demand in the last ${cfg.demandWindowMonths} months while ${units(signal.onHand)} remain on hand, tying up ${money(m.inventoryValue)}.`
+            : `${units(m.excessUnits)} are surplus to the ${cfg.excessCoverThresholdDays}-day forward requirement, about ${money(m.excessValue)} of working capital.`,
         ...base,
         spend: null,
       };
@@ -334,6 +335,7 @@ export function explain(
   m: SkuMetrics,
   action: RecommendationAction,
   qty: number,
+  cfg: EngineConfig = DEFAULT_ENGINE_CONFIG,
 ): string {
   if (signal.leadTimeDays == null || signal.leadTimeDays <= 0) {
     return (
@@ -364,14 +366,14 @@ export function explain(
     case "WATCH":
       return (
         `Monitor this SKU. ${m.netAvailable} units available give ${cover}, which is still above the reorder point of ` +
-        `${m.reorderPoint} units but within ${Math.round((ENGINE_CONFIG.watchBufferRatio - 1) * 100)}% of it. ` +
+        `${m.reorderPoint} units but within ${Math.round((cfg.watchBufferRatio - 1) * 100)}% of it. ` +
         `At the current run rate of ${m.avgMonthlyDemand} units per month and a ${signal.leadTimeDays}-day lead time, ` +
         `this SKU is expected to hit its reorder point shortly. No purchase is required today.`
       );
     case "EXCESS":
       if (m.avgDailyDemand <= 0) {
         return (
-          `Hold and review. There has been no recorded demand in the last ${ENGINE_CONFIG.demandWindowMonths} months, ` +
+          `Hold and review. There has been no recorded demand in the last ${cfg.demandWindowMonths} months, ` +
           `yet ${signal.onHand} units remain on hand tying up ${money(m.inventoryValue)} of working capital. ` +
           `Consider discontinuation, promotion or return to supplier rather than replenishment.`
         );
@@ -379,7 +381,7 @@ export function explain(
       return (
         `Do not reorder. ${m.netAvailable} units available provide ${cover} against a ${signal.leadTimeDays}-day lead time and a ` +
         `${signal.safetyStockDays}-day safety buffer. Approximately ${m.excessUnits} units are surplus to the ` +
-        `${ENGINE_CONFIG.excessCoverThresholdDays}-day forward requirement, representing about ${money(m.excessValue)} of ` +
+        `${cfg.excessCoverThresholdDays}-day forward requirement, representing about ${money(m.excessValue)} of ` +
         `excess working capital. Redeploy, promote or run this stock down before purchasing again.`
       );
     default:
@@ -391,14 +393,17 @@ export function explain(
   }
 }
 
-export function evaluateSku(signal: SkuSignal): SkuRecommendation {
-  const metrics = computeMetrics(signal);
+export function evaluateSku(
+  signal: SkuSignal,
+  cfg: EngineConfig = DEFAULT_ENGINE_CONFIG,
+): SkuRecommendation {
+  const metrics = computeMetrics(signal, cfg);
   const dataQuality = assessDataQuality(signal);
   const blocked = dataQuality.some((i) => i.blocking);
-  const action = classify(signal, metrics);
+  const action = classify(signal, metrics, cfg);
   const rawQty =
     action === "REORDER" && !blocked ? Math.max(0, metrics.targetStock - metrics.netAvailable) : 0;
-  const recommendedQty = applyMoq(rawQty, signal.minOrderQty);
+  const recommendedQty = applyMoq(rawQty, signal.minOrderQty, cfg.orderMultiple);
   const estimatedCost = round(recommendedQty * signal.unitCost);
   const stockoutRisk =
     metrics.avgDailyDemand > 0 &&
@@ -414,11 +419,14 @@ export function evaluateSku(signal: SkuSignal): SkuRecommendation {
     stockoutRisk,
     dataQuality,
     blocked,
-    explanation: buildExplanation(signal, metrics, action, recommendedQty, blocked),
-    reason: explain(signal, metrics, action, recommendedQty),
+    explanation: buildExplanation(signal, metrics, action, recommendedQty, blocked, cfg),
+    reason: explain(signal, metrics, action, recommendedQty, cfg),
   };
 }
 
-export function evaluateAll(signals: SkuSignal[]): SkuRecommendation[] {
-  return signals.map(evaluateSku);
+export function evaluateAll(
+  signals: SkuSignal[],
+  cfg: EngineConfig = DEFAULT_ENGINE_CONFIG,
+): SkuRecommendation[] {
+  return signals.map((s) => evaluateSku(s, cfg));
 }
