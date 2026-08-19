@@ -88,5 +88,5 @@ export function formatProductLabel(
 ): string {
   if (display === "sku") return sku;
   if (display === "name") return name || sku;
-  return name ? `${sku} — ${name}` : sku;
+  return name ? `${sku} · ${name}` : sku;
 }

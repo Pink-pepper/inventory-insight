@@ -69,6 +69,7 @@ function Facts({ heading, items }: { heading: string; items: string[] }) {
 function SkuPage() {
   const { sku } = Route.useParams();
   const fn = useServerFn(getSkuDetail);
+  const productLabel = useProductLabel();
   const { data, isLoading } = useQuery({
     queryKey: ["sku", sku],
     queryFn: () => fn({ data: { sku } }),
@@ -81,7 +82,7 @@ function SkuPage() {
 
   return (
     <AppShell
-      title={data ? `${data.sku} · ${data.name}` : sku}
+      title={data ? productLabel(data.sku, data.name) : sku}
       description={data ? `${data.category} · supplied by ${data.supplierName}` : "SKU analysis"}
       actions={
         <Button asChild variant="outline" size="sm">
