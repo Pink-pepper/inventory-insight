@@ -149,6 +149,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
         name: p.name,
         category: p.category,
         unit_cost: p.unitCost,
+        ...(p.unitPrice == null ? {} : { unit_price: p.unitPrice }),
         supplier_id: supplierIdByCode.get(p.supplierCode) ?? null,
         lead_time_days: p.leadTimeDays,
         min_order_qty: p.minOrderQty,
@@ -191,6 +192,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
       period_month: s.periodMonth,
       quantity: s.quantity,
       revenue: s.revenue,
+      ...(s.cogs == null ? {} : { cogs: s.cogs }),
     }));
   for (const part of chunk(saleRows, 500)) {
     const { error } = await supabase
