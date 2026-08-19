@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getWorkspace } from "@/lib/ionic.functions";
+import { formatProductLabel } from "@/lib/domain/planning-policy";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -25,6 +26,17 @@ const NAV = [
 export function useWorkspace() {
   const fn = useServerFn(getWorkspace);
   return useQuery({ queryKey: ["workspace"], queryFn: () => fn() });
+}
+
+/**
+ * Single place that decides how a product is labelled, driven by the
+ * organisation's display preference. Screens call this instead of formatting
+ * SKU and name themselves.
+ */
+export function useProductLabel() {
+  const { data } = useWorkspace();
+  const display = data?.planningPolicy.productDisplay ?? "sku_name";
+  return (sku: string, name: string) => formatProductLabel(display, sku, name);
 }
 
 export function AppShell({
