@@ -1,131 +1,68 @@
-# Ionic Planning Extension — Architecture Audit & Implementation Plan
+# Package 1 — Planning & Data Foundation
 
-Audit only. No application code, schema, RLS, auth, dependency or UI changes were made.
+Goal: turn Ionic's hard-coded planning assumptions into an organisation-scoped, configuration-driven foundation, and add only the data structures the future planning packages genuinely require. No new planning screens, no forecasting, no ingestion changes.
 
-## 1. Current architecture assessment
+## 1. Organisation planning policies
 
-**Tenancy & auth.** Every customer row carries `org_id`. `resolveOrg()` derives the workspace server-side from `memberships` (first membership by `created_at`) — client-supplied org IDs are never trusted. Auth is Supabase; protected pages live under `_authenticated/` with an `ssr: false` gate; server functions use `requireSupabaseAuth`. RLS uses `is_org_member()` / `has_org_role()` security-definer helpers, plus least-privilege table grants and composite `(org_id, id)` foreign keys that prevent cross-tenant references. This model extends cleanly to every new planning table.
+New table `planning_policies`, one row per organisation, every parameter nullable so "not configured" is a real state rather than a silent default:
 
-**Data model.** `organizations, profiles, memberships, suppliers, products, inventory, sales, purchase_orders, data_sources, recommendations, audit_logs`. A canonical TypeScript model (`src/lib/domain/model.ts`) sits between connectors, the engine and the UI; the repository (`src/lib/data/repository.ts`) is the only place that speaks snake_case Supabase rows.
+- Inventory: reorder point override, minimum stock level, target stock level, days-of-cover target, safety stock days, service level
+- Demand: historical demand window (months), planning horizon (days), demand methodology, growth/decline %, seasonality flag, demand variability
+- Supply: default supplier lead time, lead-time variability, default MOQ, order multiple
+- Display: `product_display` = `sku` | `name` | `sku_name`
 
-**Engine.** `src/lib/engine/inventory-engine.ts` is pure, UI-free rule-based logic with all tunables in a single `ENGINE_CONFIG` constant, and it already produces structured explanations, data-quality blocks and per-SKU metrics (ROP, safety stock, cover, excess, target stock).
+Security follows the existing pattern exactly: `GRANT` to `authenticated` and `service_role` only, RLS on, SELECT via `is_org_member(org_id)`, INSERT/UPDATE/DELETE via `has_org_role(org_id, ['owner','admin'])`. `org_id` is always derived server-side from membership, never accepted from the client.
 
-**Where it does not yet support planning**
+## 2. Backward compatibility (non-negotiable)
 
-| Requirement | Gap |
-|---|---|
-| Planning policies / scenario assumptions | `ENGINE_CONFIG` is a compile-time constant. Nothing is per-organisation or per-run. |
-| Demand grain | `sales` is monthly only (`period_month`), keyed by product. No day/week/quarter, no channel, region, state or customer dimension. |
-| Distribution planning | `inventory.location` is free text with no location entity, region/state, or transfer concept. |
-| Procurement | `purchase_orders` has one product per row and a single 4-value status; no PO number, received qty, currency, buyer, approval vs fulfilment split, ETA vs actual delivery. |
-| Scenarios / Plan vs Actual | `recommendations` stores one live run (`run_id`) with no named, saved, comparable versions and no forecast/plan rows to compare actuals against. |
-| Excel ingestion | Connector interface is generic, but the CSV connector is a single-sheet string parser and no `.xlsx` reader is installed. |
-| Product identification | Both SKU and name are stored; display mode is hardcoded in UI. |
-| Filtering | Inventory/Recommendations filter with a single in-memory text box over a full server payload — fine at 50 SKUs, not at planner scale. |
+`ENGINE_CONFIG` becomes `DEFAULT_ENGINE_CONFIG`. A new `resolveEngineConfig(policy | null)` merges only the fields an organisation has actually set on top of those defaults. Every engine function takes an optional config argument defaulting to the defaults object, so:
 
-## 2. Reusable components (extend, do not recreate)
+- organisation with no policy row -> numerically identical output to today
+- organisation with a policy -> its parameters drive the same formulas
 
-- `resolveOrg`, `audit`, `persistDataset`, `loadSignals` — reuse for every new entity.
-- Canonical domain model + repository mapping boundary — add planning types alongside.
-- `inventory-engine.ts` — becomes the *inventory* strategy inside a broader planning engine; parameterise `ENGINE_CONFIG` instead of forking it.
-- `Connector<TInput>` interface + `CONNECTOR_CATALOGUE` — the Excel reader is a new connector emitting the same `CanonicalDataset`.
-- `summarise()` analytics, `AppShell`/nav, `StatusBadge`, table + explain-row patterns, skeletons and empty states.
-- `audit_logs` — extend with plan/scenario/PO events.
+No formula, classification threshold or explanation wording changes. Policy values the current formulas do not consume yet (service level, variability, seasonality, horizon, growth) are stored and validated but explicitly not wired into maths in this package.
 
-## 3. Required data-model changes (proposed)
-
-**Planning foundation**
-- `planning_policies` — one active row per org: horizon, history window, demand method, service level, growth, seasonality mode, default safety-stock/target cover, review period, order-multiple and MOQ policy, product display mode (`sku | name | sku_name`), base currency.
-- `planning_scenarios` — named, versioned; `assumptions jsonb` overriding the policy; status draft/saved/baseline.
-- `plan_runs` — execution of a scenario: inputs snapshot, timings, counts, `created_by`.
-- `plan_results` — per SKU × location × period output (demand, supply, projected on-hand, recommended order, cost) linked to `plan_run_id`.
-
-**Data foundation**
-- `locations` (code, name, type, region, state, country) and `inventory.location_id`; keep the text column during transition.
-- `channels`, optional `customers`.
-- `demand_history` / re-grained `sales` — add `period_start`, `grain`, `channel_id`, `location_id`, `customer_id`, value and cost columns. Safest path: a new fact table plus a compatibility view feeding the existing engine.
-- `inventory` — add `allocated`, `available`, `stock_as_of`/age, `selling_price` on products, plus cost/price history if margin planning is required.
-
-**Distribution**
-- `transfer_recommendations` (from/to location, SKU, qty, rationale, saving) produced by a rebalancing pass that runs *before* external procurement.
-
-**Procurement**
-- Extend `purchase_orders` with `po_number`, `po_date`, `approval_status` (separate enum from fulfilment `status`), `currency`, `fx_rate`, `requested_delivery_date`, `eta`, `actual_delivery_date`, `receiving_location_id`, `buyer_id`, `source_plan_run_id`; add `purchase_order_lines` for multi-line POs with `qty_ordered` / `qty_received` / outstanding.
-
-**Plan vs Actual**
-- `plan_actual_snapshots` or a view joining `plan_results` to realised demand/supply/inventory/revenue by period, with variance columns.
-
-Every new table needs `org_id`, RLS via `is_org_member` / `has_org_role`, and explicit GRANTs in the same migration.
-
-## 4. Dependency map
+## 3. Configuration flow
 
 ```text
-Planning policies ──► Scenarios ──► Plan runs ──► Plan results
-        │                                  │
-        ▼                                  ▼
-Parameterised engine              Plan vs Actual  ──► Intelligence
-        ▲                                  ▲
-Locations/channels/time-grain facts ───────┘
-        │
-        ├──► Demand planning ──► Supply planning ──► Distribution planning
-        │                              │
-        └──► Excel/CSV ingestion       └──► PO inbox (linkage back to plan runs)
+Organisation -> planning_policies row -> resolveEngineConfig() -> engine -> recommendation
 ```
-Nothing meaningful can be built before (a) parameterised assumptions and (b) the finer-grained demand/location facts. Scenario compare depends on plan runs; Plan vs Actual depends on both plan results and actuals; intelligence depends on everything.
 
-## 5. Recommended implementation sequence
+The engine keeps zero imports from React, Supabase or route code. The repository loads the policy alongside signals and passes the resolved config into `evaluateAll`. Recommendation runs continue to use the existing run provenance fields.
 
-The proposed order is broadly right, with one change: **swap packages 1 and 2 partially** — the data foundation (locations, time grain, channels) must land alongside the planning foundation, because demand planning is unbuildable without it and retrofitting grain later would rewrite the engine twice.
+## 4. Product identification preference
 
-1. **P1 Planning foundation** — `planning_policies` table + settings UI; make `ENGINE_CONFIG` a resolved runtime object (policy → scenario override → default). No behaviour change when a policy is absent.
-2. **P2 Data foundation** — `locations`, `channels`, grain-aware demand facts, compatibility view, product display mode, extended inventory fields. CSV connector maps the new optional columns; existing files keep working.
-3. **P3 Excel ingestion** — `.xlsx` multi-sheet connector emitting the same `CanonicalDataset`, with sheet→entity mapping UI. Requires one new parsing dependency.
-4. **P4 Planning workspaces** — Demand planning (grain, comparisons, dimensions) then Supply planning (constraints, ETA, MOQ, multiples, FX/tariffs), plus planner-grade server-side filtering/sorting/pagination on Inventory.
-5. **P5 Scenario planning** — scenarios, runs, saved versions, side-by-side compare and assumption-delta view.
-6. **P6 Distribution planning** — rebalancing pass ahead of external procurement recommendations.
-7. **P7 Procurement / PO inbox** — extended PO schema, lines, approval vs fulfilment status, plan linkage.
-8. **P8 Plan vs Actual** then **P9 Intelligence layer** — detection rules over the variance/signal history, quantified impact and suggested scenarios.
+One reusable helper (`formatProductLabel(preference, sku, name)`) plus exposure of the preference through the existing workspace server function. SKU and name both remain stored. Existing screens keep their current appearance; only places already rendering "SKU — name" route through the helper. No navigation or layout changes.
 
-## 6. Security considerations
+## 5. Geography dimension
 
-Same posture, extended: `org_id` + RLS + explicit GRANTs on every new table; policies, scenarios, plan runs and POs are org-scoped; write-sensitive actions (editing planning policy, approving a PO, deleting a scenario) gate on `has_org_role(owner/admin)`, mirroring the existing delete policy. Scenario `assumptions jsonb` must be validated with Zod server-side and bounded — it is planner input, not free execution. Excel upload needs the same file-type/size limits, formula-injection neutralisation and sanitisation the CSV path already has, plus a per-sheet row cap, and must be parsed inside a server function (never trust client-parsed workbooks). Plan runs must record `created_by` and emit audit events. Approval workflow implies a real per-user permission model — today membership roles exist but no per-action grants.
+New org-scoped `locations` table: code, name, country, region, state/province — supporting Country > Region > State > Location, with Nigerian state-level planning possible later. `inventory` gains a nullable `location_id`; the existing `location` text column stays and remains the source of truth for current code. A backfill creates one `locations` row per distinct existing inventory location and links it. Nothing is renamed or dropped.
 
-## 7. Migration / backward compatibility risks
+## 6. Time dimensions
 
-- Re-graining `sales` is the highest-risk change; mitigate with an additive fact table + view so `loadSignals` and the engine keep working unchanged.
-- `inventory.location` → `location_id` must be additive with a backfill, not a rename.
-- Making engine config dynamic must default to today's constants so existing recommendations are byte-identical when no policy exists.
-- PO status split must preserve the current `po_status` enum values.
-- Serving planner-scale data through the existing "fetch everything, filter client-side" pattern will degrade; server-side filtering must arrive with P4.
+Recommendation: no new fact table and no derived-period columns in this package. `sales.period_month` stays the monthly grain the MVP writes and reads. Week/quarter/year and arbitrary ranges are derived at query time. This package ships a shared `time-grain` utility (bucket a date to day/week/month/quarter/year, build comparison ranges for YoY/QoQ/MoM/WoW) that future services and any eventual day-grain fact table both consume. Moving to daily/customer/channel grain requires a real migration and is deliberately deferred to the demand-planning package, where a compatibility view can preserve the monthly read path.
 
-## 8. Risks, unknowns, and out-of-scope items
+## 7. Commercial metrics
 
-**Needs a product/engineering decision before implementation**
-1. Forecasting method: rule-based moving average + seasonality index only, or statistical models (Holt-Winters/Croston)? Advanced forecasting was explicitly excluded from the MVP.
-2. Nigeria state/region hierarchy: fixed reference list or org-configurable?
-3. Multi-currency: store transaction currency + FX rate table, or single base currency with converted-at-ingest values?
-4. Tariffs and supplier price changes: modelled as landed-cost rules, or simple scenario percentage adders?
-5. PO approval: single approver, or roles/thresholds (implies a permissions model beyond owner/admin/member)?
-6. Whether POs are authored in Ionic or only mirrored from the ERP.
-7. Plan storage volume — SKU × location × period × scenario grows fast; needs a retention/aggregation policy.
+Additive, nullable only: `products.unit_price` (selling price) and `sales.cogs`. Revenue already exists. Gross margin and margin % are derived, never stored. Nothing is fabricated — where price or COGS is absent, margin is reported as unavailable, consistent with how the engine already handles missing lead time.
 
-**Outside current scope/capability**
-- `.xlsx` parsing needs a new dependency; it must be a pure-JS, edge-compatible reader because the server runtime is a Cloudflare Worker (no native binaries, no `child_process`). Large workbooks may exceed request/memory limits — very large files would need chunked upload to storage plus background processing, which the current synchronous server-function model does not provide.
-- Real ERP connectors (Odoo/SAP/Dynamics/NetSuite) remain out of scope; they need per-vendor credentials, OAuth and scheduled sync infrastructure.
-- Live FX and tariff data require an external paid API and a scheduled job.
-- Long-running plan runs across large catalogues may exceed serverless execution limits; a queue/batching approach would be needed.
+## 8. Reusable filtering foundation
 
-## 9. Architecture Audit Status
+A shared, server-side filter specification (product/SKU, supplier, category, location, region/state, date range, grain) with a validated Zod schema and a single applier used by server functions. No UI filter work, no page-specific implementations.
 
-- **Status:** Complete
-- **Repository inspected:** Yes
-- **Implemented:** No — audit only
-- **Current architecture:** Multi-tenant Supabase app with RLS-enforced org isolation, a canonical domain model, a repository boundary, a pure rule-based inventory engine and a five-page authenticated UI.
-- **Key reusable components:** `resolveOrg`/`audit`/`persistDataset`/`loadSignals`, the canonical model, the connector interface, the inventory engine, `summarise()`, and the AppShell/table/status UI patterns.
-- **Key gaps:** No per-org planning policies or scenarios, monthly-only demand with no channel/region/location dimensions, no location entity or transfers, thin PO model, no plan-vs-actual store, no Excel reader.
-- **Database/schema implications:** ~10 new tables plus additive columns; all additive, all org-scoped, with a compatibility view protecting the existing engine.
-- **Security implications:** No change to the validated posture; new tables inherit RLS + GRANTs, scenario JSON needs strict server-side validation, Excel uploads need the CSV-grade hardening, approvals imply a richer permission model.
-- **Recommended sequence:** Planning foundation + data foundation together, then Excel ingestion, planning workspaces, scenarios, distribution, procurement, plan-vs-actual, intelligence.
-- **Outside scope / limitations:** Edge-runtime Excel parsing limits, no background job runner, no ERP connectors, no FX/tariff data source.
-- **Critical decisions required:** Forecast methodology, currency handling, tariff modelling, PO approval permissions, PO authorship, region hierarchy, plan-data retention.
-- **Recommended next step:** Answer decisions 1, 3 and 5, then implement Package 1 (planning policies + parameterised engine) as a strictly additive, behaviour-preserving change.
+## Technical notes
+
+- Migration is additive only: one new table (`planning_policies`), one new dimension table (`locations`), nullable columns (`inventory.location_id`, `products.unit_price`, `sales.cogs`), plus a backfill of locations from existing inventory rows. Rollback = drop the new table/columns; existing queries never reference them.
+- New/changed files: `src/lib/domain/planning-policy.ts` (types, defaults, resolver), `src/lib/engine/inventory-engine.ts` (config threaded through, defaults preserved), `src/lib/data/repository.ts` (load/save policy, pass config), `src/lib/ionic.functions.ts` (get/update policy server functions, owner/admin only, Zod-validated), `src/lib/query/filters.ts`, `src/lib/domain/time-grain.ts`, `src/lib/format.ts` (product label helper), `src/routes/_authenticated/settings.tsx` (planning policy + display preference form on the existing page).
+- Security: no change to auth, CSRF, headers, middleware or existing RLS. The new tables inherit the established grant/policy pattern; writes are role-gated server-side, not in the browser.
+- Verification after implementation: typecheck, production build, migration applied and linted, recommendation output compared before/after for an org with no policy (must be identical), CSV ingestion re-run, cross-tenant read/write attempt against `planning_policies` confirmed blocked.
+
+## Out of this package
+
+Demand/Supply/Distribution/Scenario UIs, PO inbox, Excel ingestion, forecasting, plan vs actual, customer/channel grain, FX and tariffs.
+
+## Architectural observations (reported, not fixed)
+
+- Should fix soon: `buildRecommendationView` recomputes the whole workspace on every page load; it will not scale past a few thousand SKUs and should move to server-side pagination in a later package.
+- Future consideration: `resolveOrg` always picks the user's oldest membership, so multi-org users cannot switch workspaces.
+- Safe to leave alone: monthly-only sales grain, until demand planning needs daily.
