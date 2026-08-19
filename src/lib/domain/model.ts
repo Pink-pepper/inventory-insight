@@ -94,11 +94,14 @@ export interface DataSource {
   errorCount: number;
 }
 
+/** Values an audit entry may carry; JSON-serialisable by construction. */
+export type AuditDetailValue = string | number | boolean | null;
+
 /** An append-only workspace activity entry. */
 export interface AuditEvent {
   id: string;
   event: string;
-  detail: Record<string, unknown>;
+  detail: Record<string, AuditDetailValue>;
   occurredAt: string;
 }
 
