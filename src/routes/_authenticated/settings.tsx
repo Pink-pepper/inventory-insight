@@ -114,7 +114,7 @@ function SettingsPage() {
                 <li key={a.id} className="flex justify-between gap-3">
                   <span className="font-mono text-muted-foreground">{a.event}</span>
                   <span className="text-muted-foreground tabular">
-                    {new Date(a.created_at).toLocaleString()}
+                    {new Date(a.occurredAt).toLocaleString()}
                   </span>
                 </li>
               ))}
