@@ -181,7 +181,7 @@ function DemandPlanningPage() {
                         type="monotone"
                         dataKey="observed"
                         name="Observed"
-                        stroke="hsl(var(--chart-1))"
+                        stroke="var(--chart-1)"
                         strokeWidth={2}
                         dot={false}
                         connectNulls={false}
@@ -190,7 +190,7 @@ function DemandPlanningPage() {
                         type="monotone"
                         dataKey="planned"
                         name="Planned baseline"
-                        stroke="hsl(var(--chart-2))"
+                        stroke="var(--chart-2)"
                         strokeWidth={2}
                         strokeDasharray="5 4"
                         dot={false}
@@ -234,7 +234,7 @@ function DemandPlanningPage() {
                       <XAxis dataKey="label" fontSize={10} tickLine={false} interval={0} hide />
                       <YAxis fontSize={11} tickLine={false} width={56} />
                       <Tooltip />
-                      <Bar dataKey="quantity" name="Demand" fill="hsl(var(--chart-1))" />
+                      <Bar dataKey="quantity" name="Demand" fill="var(--chart-1)" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
