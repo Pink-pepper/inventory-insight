@@ -38,7 +38,7 @@ function InventoryPage() {
     queryKey: ["recommendations"],
     queryFn: () => fn(),
   });
-  const [filter, setFilter] = useState<PlanningFilter>({});
+  const [filter, setFilter] = useState<PlanningFilter>({ compare: "prev" });
 
   // Demand context for the same scope: direction comes from the demand
   // workspace so both screens explain movement with identical numbers.
@@ -137,7 +137,7 @@ function InventoryPage() {
                         {r.sku}
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5">{r.name}</td>
+                    <td className="px-3 py-2.5">{label(r.sku, r.name)}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{r.category}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{r.supplierName}</td>
                     <td className="px-3 py-2.5 text-right tabular">{num(r.onHand)}</td>
