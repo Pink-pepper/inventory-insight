@@ -107,7 +107,7 @@ function DemandPlanningPage() {
           <PlanningFilters filter={filter} options={data.options} onChange={setFilter} />
 
           {plan.coverage.note ? (
-            <div className="panel border-l-2 border-l-warning px-4 py-3 text-sm text-muted-foreground">
+            <div className="panel border-l-2 border-l-status-watch px-4 py-3 text-sm text-muted-foreground">
               {plan.coverage.note}
             </div>
           ) : null}
@@ -221,7 +221,7 @@ function DemandPlanningPage() {
                   </select>
                 </div>
                 {plan.dimensionFellBack ? (
-                  <p className="mt-1 text-xs text-warning-foreground">
+                  <p className="mt-1 text-xs text-status-watch">
                     The selected dimension carries no values in the ingested data, so the breakdown
                     falls back to product.
                   </p>
@@ -303,7 +303,7 @@ function DemandPlanningPage() {
                     .
                   </li>
                   {plan.baseline.limitations.map((l) => (
-                    <li key={l} className="text-warning-foreground">
+                    <li key={l} className="text-status-watch">
                       {l}
                     </li>
                   ))}
