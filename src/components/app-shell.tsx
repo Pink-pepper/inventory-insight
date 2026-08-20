@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   LayoutDashboard,
   Boxes,
+  TrendingUp,
   ClipboardList,
   Database,
   Settings,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/demand-planning", label: "Demand Planning", icon: TrendingUp },
   { to: "/inventory", label: "Inventory", icon: Boxes },
   { to: "/recommendations", label: "Recommendations", icon: ClipboardList },
   { to: "/data-sources", label: "Data Sources", icon: Database },

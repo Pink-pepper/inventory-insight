@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedDataSourcesRouteImport } from './routes/_authenticated/data-sources'
+import { Route as AuthenticatedDemandPlanningRouteImport } from './routes/_authenticated/demand-planning'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
@@ -43,6 +44,12 @@ const AuthenticatedDataSourcesRoute =
   AuthenticatedDataSourcesRouteImport.update({
     id: '/data-sources',
     path: '/data-sources',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDemandPlanningRoute =
+  AuthenticatedDemandPlanningRouteImport.update({
+    id: '/demand-planning',
+    path: '/demand-planning',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
@@ -77,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
+  '/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
@@ -88,6 +96,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
+  '/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
@@ -101,6 +110,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/data-sources': typeof AuthenticatedDataSourcesRoute
+  '/_authenticated/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/overview': typeof AuthenticatedOverviewRoute
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/data-sources'
+    | '/demand-planning'
     | '/inventory'
     | '/overview'
     | '/recommendations'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/data-sources'
+    | '/demand-planning'
     | '/inventory'
     | '/overview'
     | '/recommendations'
@@ -137,6 +149,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/data-sources'
+    | '/_authenticated/demand-planning'
     | '/_authenticated/inventory'
     | '/_authenticated/overview'
     | '/_authenticated/recommendations'
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDataSourcesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/demand-planning': {
+      id: '/_authenticated/demand-planning'
+      path: '/demand-planning'
+      fullPath: '/demand-planning'
+      preLoaderRoute: typeof AuthenticatedDemandPlanningRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/inventory': {
       id: '/_authenticated/inventory'
       path: '/inventory'
@@ -228,6 +248,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDataSourcesRoute: typeof AuthenticatedDataSourcesRoute
+  AuthenticatedDemandPlanningRoute: typeof AuthenticatedDemandPlanningRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
@@ -237,6 +258,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDataSourcesRoute: AuthenticatedDataSourcesRoute,
+  AuthenticatedDemandPlanningRoute: AuthenticatedDemandPlanningRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,

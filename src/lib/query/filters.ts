@@ -21,11 +21,32 @@ export const planningFilterSchema = z.object({
   regions: list(100),
   statesProvinces: list(100),
   countries: list(50),
+  channelCodes: list(200),
+  customerRefs: list(200),
   from: isoDate.optional(),
   to: isoDate.optional(),
   grain: z.enum(["day", "week", "month", "quarter", "year"]).optional(),
+  compare: z.enum(["none", "prev", "yoy"]).optional(),
   search: z.string().max(120).optional(),
 });
+
+/** Dimensions the demand workspace can pivot by. */
+export const DEMAND_DIMENSIONS = [
+  "product",
+  "category",
+  "supplier",
+  "channel",
+  "customer",
+  "location",
+  "region",
+  "state_province",
+] as const;
+
+export type DemandDimension = (typeof DEMAND_DIMENSIONS)[number];
+
+/** Comparison window applied to the selected period. */
+export const COMPARE_MODES = ["none", "prev", "yoy"] as const;
+export type CompareMode = (typeof COMPARE_MODES)[number];
 
 export type PlanningFilter = z.infer<typeof planningFilterSchema>;
 
@@ -43,6 +64,8 @@ export interface FilterableRow {
   regions?: string[];
   statesProvinces?: string[];
   countries?: string[];
+  channelCodes?: string[];
+  customerRefs?: string[];
 }
 
 const matches = (values: string[] | undefined, allowed: string[] | undefined) => {
@@ -65,6 +88,8 @@ export function applyPlanningFilter<T extends FilterableRow>(
     if (!matches(row.regions, filter.regions)) return false;
     if (!matches(row.statesProvinces, filter.statesProvinces)) return false;
     if (!matches(row.countries, filter.countries)) return false;
+    if (!matches(row.channelCodes, filter.channelCodes)) return false;
+    if (!matches(row.customerRefs, filter.customerRefs)) return false;
     if (search) {
       const haystack = `${row.sku} ${row.name ?? ""} ${row.category ?? ""}`.toLowerCase();
       if (!haystack.includes(search)) return false;

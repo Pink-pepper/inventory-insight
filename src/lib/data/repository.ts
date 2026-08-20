@@ -19,6 +19,7 @@ import {
   type DemandMethod,
 } from "@/lib/domain/planning-policy";
 import { evaluateAll, resolveEngineConfig } from "@/lib/engine/inventory-engine";
+import type { DemandFact } from "@/lib/demand/series";
 
 export type Db = SupabaseClient<Database>;
 
@@ -681,4 +682,106 @@ export async function refreshMonthlySales(
     if (error) throw new Error(error.message);
   }
   return rows.length;
+}
+/**
+ * Loads every demand observation for a workspace as flat facts.
+ *
+ * Both grains are returned side by side and tagged with their source; the
+ * demand module decides which one may legitimately answer a given question.
+ * Monthly rows are never split into days to satisfy a finer grain.
+ */
+export async function loadDemandFacts(supabase: Db, orgId: string): Promise<DemandFact[]> {
+  const [{ data: products, error: pErr }, { data: monthly, error: mErr }, { data: txns, error: tErr }] =
+    await Promise.all([
+      supabase
+        .from("products")
+        .select("id, sku, name, category, suppliers(name, code)")
+        .eq("org_id", orgId),
+      supabase
+        .from("sales")
+        .select("product_id, period_month, quantity, revenue, cogs")
+        .eq("org_id", orgId),
+      supabase
+        .from("sales_transactions")
+        .select(
+          "product_id, occurred_on, quantity, value, cogs, region, state_province, customers(external_ref, name), channels(code, name), locations(code, name, country, region, state_province)",
+        )
+        .eq("org_id", orgId),
+    ]);
+  if (pErr) throw new Error(pErr.message);
+  if (mErr) throw new Error(mErr.message);
+  if (tErr) throw new Error(tErr.message);
+
+  const productById = new Map(
+    (products ?? []).map((p) => {
+      const supplier = p.suppliers as unknown as { name: string; code: string } | null;
+      return [
+        p.id,
+        {
+          sku: p.sku,
+          name: p.name,
+          category: p.category,
+          supplierName: supplier?.name ?? "Unassigned",
+          supplierCode: supplier?.code ?? "",
+        },
+      ] as const;
+    }),
+  );
+
+  const facts: DemandFact[] = [];
+
+  for (const s of monthly ?? []) {
+    const p = productById.get(s.product_id);
+    if (!p) continue;
+    facts.push({
+      ...p,
+      date: s.period_month,
+      quantity: Number(s.quantity),
+      revenue: s.revenue == null ? null : Number(s.revenue),
+      cogs: s.cogs == null ? null : Number(s.cogs),
+      channelCode: null,
+      channelName: null,
+      customerRef: null,
+      customerName: null,
+      locationCode: null,
+      locationName: null,
+      region: null,
+      stateProvince: null,
+      country: null,
+      source: "monthly",
+    });
+  }
+
+  for (const t of txns ?? []) {
+    const p = productById.get(t.product_id);
+    if (!p) continue;
+    const customer = t.customers as unknown as { external_ref: string; name: string } | null;
+    const channel = t.channels as unknown as { code: string; name: string } | null;
+    const location = t.locations as unknown as {
+      code: string;
+      name: string;
+      country: string | null;
+      region: string | null;
+      state_province: string | null;
+    } | null;
+    facts.push({
+      ...p,
+      date: t.occurred_on,
+      quantity: Number(t.quantity),
+      revenue: t.value == null ? null : Number(t.value),
+      cogs: t.cogs == null ? null : Number(t.cogs),
+      channelCode: channel?.code ?? null,
+      channelName: channel?.name ?? null,
+      customerRef: customer?.external_ref ?? null,
+      customerName: customer?.name ?? null,
+      locationCode: location?.code ?? null,
+      locationName: location?.name ?? null,
+      region: t.region ?? location?.region ?? null,
+      stateProvince: t.state_province ?? location?.state_province ?? null,
+      country: location?.country ?? null,
+      source: "transactions",
+    });
+  }
+
+  return facts;
 }
