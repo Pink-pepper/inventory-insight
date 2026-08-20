@@ -38,9 +38,18 @@ const STORED_FIELDS: NumericField[] = [
   { key: "targetStockLevel", label: "Target stock level", hint: "" },
   { key: "daysOfCoverTarget", label: "Days of cover target", hint: "" },
   { key: "serviceLevel", label: "Service level (0–1)", hint: "", step: "0.01" },
-  { key: "demandGrowthPct", label: "Growth / decline (%)", hint: "", step: "0.1" },
   { key: "demandVariability", label: "Demand variability", hint: "", step: "0.01" },
   { key: "leadTimeVariabilityDays", label: "Lead-time variability (days)", hint: "", step: "0.1" },
+];
+
+/** Consumed by the demand plan, not by the recommendation engine. */
+const DEMAND_FIELDS: NumericField[] = [
+  {
+    key: "demandGrowthPct",
+    label: "Growth / decline (%)",
+    hint: "Applied to the trailing average on the Demand Planning page",
+    step: "0.1",
+  },
 ];
 
 const DISPLAY_OPTIONS: { value: ProductDisplay; label: string }[] = [
@@ -119,6 +128,20 @@ export function PlanningPolicyForm({
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ACTIVE_FIELDS.map(field)}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Demand planning
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          The demand window and planning horizon above also drive the demand baseline. These values
+          change the planned demand shown on the Demand Planning page; they do not change
+          recommendation quantities.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {DEMAND_FIELDS.map(field)}
         </div>
       </div>
 

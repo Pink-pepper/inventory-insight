@@ -12,6 +12,7 @@ import {
   getProfile,
   listAuditEvents,
   listDataSources,
+  loadDemandFacts,
   persistDataset,
   persistTransactions,
   regenerateRecommendations,
@@ -27,6 +28,80 @@ import {
   type PlanningPolicy,
 } from "@/lib/domain/planning-policy";
 import { summarise } from "@/lib/analytics/summary";
+import {
+  DEMAND_DIMENSIONS,
+  applyPlanningFilter,
+  planningFilterSchema,
+  type PlanningFilter,
+} from "@/lib/query/filters";
+import { buildDemandPlan, filterOptions } from "@/lib/demand/plan";
+
+export const getDemandPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({
+      filter: planningFilterSchema.optional(),
+      dimension: z.enum(DEMAND_DIMENSIONS).optional(),
+    }).parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filter: PlanningFilter = data.filter ?? {};
+    const [facts, policy, rows, lastRun] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      buildRecommendationView(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+
+    const plan = buildDemandPlan({
+      facts,
+      filter,
+      policy,
+      dimension: data.dimension ?? "product",
+    });
+
+    // Inventory implications for exactly the products in scope, carrying the
+    // observed demand direction so the planner sees signal and position side
+    // by side. Every number still comes from the existing engine.
+    const directionBySku = new Map(plan.skuDirection.map((d) => [d.sku, d]));
+    const scoped = applyPlanningFilter(
+      rows.map((r) => ({
+        ...r,
+        locationCodes: r.locations.map((l) => l.location),
+      })),
+      filter,
+    );
+    const planningRows = scoped
+      .filter((r) => plan.totals.skus === 0 || directionBySku.has(r.sku))
+      .map((r) => ({
+        sku: r.sku,
+        name: r.name,
+        category: r.category,
+        supplierName: r.supplierName,
+        action: r.action,
+        onHand: r.onHand,
+        onOrder: r.onOrder,
+        daysOfCover: r.daysOfCover,
+        reorderPoint: r.reorderPoint,
+        recommendedQty: r.recommendedQty,
+        estimatedCost: r.estimatedCost,
+        avgMonthlyDemand: r.avgMonthlyDemand,
+        blocked: r.blocked,
+        observedDemand: directionBySku.get(r.sku)?.quantity ?? 0,
+        demandChangePct: directionBySku.get(r.sku)?.changePct ?? null,
+      }));
+
+    return {
+      plan,
+      planningRows,
+      options: filterOptions(facts),
+      policy,
+      lastRun,
+      calculatedAt: new Date().toISOString(),
+    };
+  });
 
 export const getWorkspace = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
