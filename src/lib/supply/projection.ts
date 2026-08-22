@@ -72,7 +72,10 @@ export function projectPosition(input: {
   }
 
   let prev = input.onHand;
-  let lowPoint = input.onHand;
+  // The low point is the lowest PROJECTED position only. The starting on-hand
+  // is deliberately excluded: a deficit today that scheduled receipts already
+  // cover is not a reason to buy more.
+  let lowPoint = Number.POSITIVE_INFINITY;
   let firstStockout: string | null = null;
   let firstBelowSafety: string | null = null;
   let firstBelowReorder: string | null = null;
