@@ -100,7 +100,7 @@ export function projectPosition(input: {
   const firstReceiptPeriod = input.periods.find((p) => (receiptByPeriod.get(p) ?? 0) > 0) ?? null;
   return {
     points,
-    lowPoint: round2(lowPoint),
+    lowPoint: round2(points.length > 0 ? lowPoint : input.onHand),
     firstStockout,
     firstBelowSafety,
     firstBelowReorder,
