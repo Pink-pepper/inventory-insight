@@ -531,9 +531,13 @@ export type Database = {
           created_at: string
           expected_at: string | null
           id: string
+          import_batch_id: string | null
+          ordered_at: string | null
           org_id: string
           product_id: string | null
           quantity: number
+          received_quantity: number
+          source_row_hash: string | null
           status: Database["public"]["Enums"]["po_status"]
           supplier_id: string | null
           unit_cost: number
@@ -542,9 +546,13 @@ export type Database = {
           created_at?: string
           expected_at?: string | null
           id?: string
+          import_batch_id?: string | null
+          ordered_at?: string | null
           org_id: string
           product_id?: string | null
           quantity?: number
+          received_quantity?: number
+          source_row_hash?: string | null
           status?: Database["public"]["Enums"]["po_status"]
           supplier_id?: string | null
           unit_cost?: number
@@ -553,14 +561,32 @@ export type Database = {
           created_at?: string
           expected_at?: string | null
           id?: string
+          import_batch_id?: string | null
+          ordered_at?: string | null
           org_id?: string
           product_id?: string | null
           quantity?: number
+          received_quantity?: number
+          source_row_hash?: string | null
           status?: Database["public"]["Enums"]["po_status"]
           supplier_id?: string | null
           unit_cost?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "purchase_orders_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_org_batch_fk"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
           {
             foreignKeyName: "purchase_orders_org_id_fkey"
             columns: ["org_id"]

@@ -4,9 +4,11 @@ import type {
   CanonicalDataset,
   CanonicalInventory,
   CanonicalProduct,
+  CanonicalPurchaseOrder,
   CanonicalSale,
   CanonicalSupplier,
   CanonicalTransaction,
+  PurchaseOrderStatus,
 } from "@/lib/domain/model";
 import { csvConnector } from "@/lib/connectors/csv-connector";
 import { LIMITS, cell, type SheetTable } from "./sheet-table";
@@ -36,6 +38,7 @@ const emptyDataset = (): Required<CanonicalDataset> => ({
   customers: [],
   channels: [],
   transactions: [],
+  purchaseOrders: [],
 });
 
 function supplierCodeFrom(code: string, name: string): string {
@@ -73,6 +76,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   const customers = new Map<string, CanonicalCustomer>();
   const channels = new Map<string, CanonicalChannel>();
   const transactions: CanonicalTransaction[] = [];
+  const purchaseOrders: CanonicalPurchaseOrder[] = [];
   const referenced = new Set<string>();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -299,6 +303,56 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           return;
         }
 
+        case "purchase_orders": {
+          const sku = safeText(get(row, "sku"));
+          if (!sku) return reject("sku", "Missing SKU. Row rejected.");
+          const qty = num(row, "quantity");
+          const received = num(row, "received_quantity");
+          const cost = num(row, "unit_cost");
+          for (const [field, parsed] of [["quantity", qty], ["received_quantity", received], ["unit_cost", cost]] as const) {
+            if (parsed.malformed) return reject(field, `"${get(row, field)}" is not a valid number. Row rejected.`);
+            if (outOfRange(parsed.value)) return reject(field, `Value for ${field.replace(/_/g, " ")} is outside the supported range. Row rejected.`);
+          }
+          if (qty.value == null) return reject("quantity", "Missing order quantity. Row rejected.");
+          if (qty.value <= 0) return reject("quantity", "Order quantity must be greater than zero. Row rejected.");
+          if (cost.value != null && cost.value < 0) return reject("unit_cost", "Unit cost cannot be negative. Row rejected.");
+          if (received.value != null && received.value < 0) return reject("received_quantity", "Received quantity cannot be negative. Row rejected.");
+          let receivedQuantity = received.value ?? 0;
+          if (receivedQuantity > qty.value) {
+            log.add(sheet.sheetName, rowNo, "received_quantity", "Received quantity exceeds the ordered quantity; capped at the ordered quantity.", "warning");
+            receivedQuantity = qty.value;
+          }
+          const orderedRaw = get(row, "ordered_at");
+          const orderedAt = parseDate(orderedRaw);
+          if (orderedRaw?.trim() && !orderedAt) {
+            log.add(sheet.sheetName, rowNo, "ordered_at", `Unrecognised order date "${safeText(orderedRaw)}". The row is kept without it.`, "warning");
+          }
+          const expectedRaw = get(row, "expected_at");
+          const expectedAt = parseDate(expectedRaw);
+          if (expectedRaw?.trim() && !expectedAt) {
+            log.add(sheet.sheetName, rowNo, "expected_at", `Unrecognised expected date "${safeText(expectedRaw)}". The line is kept as unscheduled supply.`, "warning");
+          }
+          const status = parsePoStatus(get(row, "po_status"), (message) =>
+            log.add(sheet.sheetName, rowNo, "po_status", message, "warning"),
+          );
+          referenced.add(sku);
+          purchaseOrders.push({
+            poRef: safeText(get(row, "po_ref")) || null,
+            status,
+            sku,
+            supplierCode: safeText(get(row, "supplier_code")) || null,
+            supplierName: safeText(get(row, "supplier_name")) || null,
+            quantity: qty.value,
+            receivedQuantity,
+            unitCost: cost.value,
+            orderedAt,
+            expectedAt,
+            rowHash: rowHash([sku, qty.value, receivedQuantity, orderedAt, expectedAt, status, safeText(get(row, "po_ref")), safeText(get(row, "supplier_code")) || safeText(get(row, "supplier_name"))]),
+          });
+          rowsAccepted++;
+          return;
+        }
+
         case "customers": {
           const name = safeText(get(row, "customer_name"));
           if (!name) return reject("customer_name", "Missing customer name. Row rejected.");
@@ -334,6 +388,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   out.customers = [...customers.values()];
   out.channels = [...channels.values()];
   out.transactions = transactions;
+  out.purchaseOrders = purchaseOrders;
 
   return {
     dataset: out,
@@ -341,4 +396,38 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
     stats: { rowsRead, rowsAccepted, rowsRejected, warnings: log.warnings },
     referencedSkus: [...referenced],
   };
+}
+
+/**
+ * Maps a source status word onto the canonical PO lifecycle. Unknown values
+ * are kept as "placed" with a warning — the outstanding quantity still
+ * represents real expected supply, so the row is not dropped over vocabulary.
+ */
+const PO_STATUS_MAP: Record<string, PurchaseOrderStatus> = {
+  draft: "draft",
+  placed: "placed",
+  open: "placed",
+  confirmed: "placed",
+  approved: "placed",
+  ordered: "placed",
+  sent: "placed",
+  in_progress: "placed",
+  received: "received",
+  closed: "received",
+  complete: "received",
+  completed: "received",
+  delivered: "received",
+  fulfilled: "received",
+  cancelled: "cancelled",
+  canceled: "cancelled",
+  void: "cancelled",
+};
+
+function parsePoStatus(raw: string, warn: (message: string) => void): PurchaseOrderStatus {
+  const key = safeText(raw).toLowerCase().replace(/[\s-]+/g, "_");
+  if (!key) return "placed";
+  const mapped = PO_STATUS_MAP[key];
+  if (mapped) return mapped;
+  warn(`Unknown purchase order status "${safeText(raw)}" — treated as placed.`);
+  return "placed";
 }

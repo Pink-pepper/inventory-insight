@@ -4,6 +4,7 @@ import type {
   AuditDetailValue,
   AuditEvent,
   CanonicalDataset,
+  CanonicalPurchaseOrder,
   ConnectorType,
   DataSource,
   InventoryPosition,
@@ -784,4 +785,155 @@ export async function loadDemandFacts(supabase: Db, orgId: string): Promise<Dema
   }
 
   return facts;
+}
+
+/** A purchase order line that still represents inbound supply. */
+export interface OpenSupplyLine {
+  poId: string;
+  productId: string | null;
+  sku: string;
+  productName: string;
+  supplierName: string | null;
+  quantity: number;
+  receivedQuantity: number;
+  outstanding: number;
+  expectedAt: string | null;
+  orderedAt: string | null;
+}
+
+/**
+ * Open purchase orders (placed, with an outstanding quantity). Received and
+ * cancelled orders are history, not supply, and are never returned here.
+ */
+export async function loadOpenSupply(supabase: Db, orgId: string): Promise<OpenSupplyLine[]> {
+  const { data, error } = await supabase
+    .from("purchase_orders")
+    .select("id, product_id, quantity, received_quantity, expected_at, ordered_at, products(sku, name), suppliers(name)")
+    .eq("org_id", orgId)
+    .eq("status", "placed");
+  if (error) throw new Error(error.message);
+  return (data ?? [])
+    .map((row) => {
+      const quantity = Number(row.quantity) || 0;
+      const receivedQuantity = Math.min(quantity, Math.max(0, Number(row.received_quantity) || 0));
+      const product = row.products as unknown as { sku: string; name: string } | null;
+      const supplier = row.suppliers as unknown as { name: string } | null;
+      return {
+        poId: row.id,
+        productId: row.product_id,
+        sku: product?.sku ?? "",
+        productName: product?.name ?? "",
+        supplierName: supplier?.name ?? null,
+        quantity,
+        receivedQuantity,
+        outstanding: quantity - receivedQuantity,
+        expectedAt: row.expected_at,
+        orderedAt: row.ordered_at,
+      };
+    })
+    .filter((line) => line.outstanding > 0 && line.sku !== "");
+}
+
+export interface PurchaseOrderPersistResult {
+  inserted: number;
+  duplicates: number;
+  unknownSkus: string[];
+  unknownSuppliers: string[];
+}
+
+/**
+ * Writes imported purchase orders with re-import detection and batch
+ * provenance. Suppliers are only linked when the code or name matches an
+ * existing supplier — ingestion never invents vendor master data.
+ */
+export async function persistPurchaseOrders(
+  supabase: Db,
+  orgId: string,
+  rows: CanonicalPurchaseOrder[] | undefined,
+  batchId: string | null,
+): Promise<PurchaseOrderPersistResult> {
+  const pos = rows ?? [];
+  if (pos.length === 0) return { inserted: 0, duplicates: 0, unknownSkus: [], unknownSuppliers: [] };
+
+  const [{ data: products, error: pErr }, { data: suppliers, error: sErr }] = await Promise.all([
+    supabase.from("products").select("id, sku, unit_cost").eq("org_id", orgId),
+    supabase.from("suppliers").select("id, code, name").eq("org_id", orgId),
+  ]);
+  if (pErr) throw new Error(pErr.message);
+  if (sErr) throw new Error(sErr.message);
+  const productBySku = new Map(
+    (products ?? []).map((p) => [p.sku, { id: p.id, unitCost: Number(p.unit_cost) }]),
+  );
+  const supplierIdByCode = new Map(
+    (suppliers ?? []).filter((s) => s.code).map((s) => [s.code!.toLowerCase(), s.id]),
+  );
+  const supplierIdByName = new Map((suppliers ?? []).map((s) => [s.name.toLowerCase(), s.id]));
+
+  // Re-import detection: identical fingerprints are skipped, not duplicated.
+  const hashes = [...new Set(pos.map((p) => p.rowHash))];
+  const existing = new Set<string>();
+  for (const part of chunk(hashes, 500)) {
+    const { data, error } = await supabase
+      .from("purchase_orders")
+      .select("source_row_hash")
+      .eq("org_id", orgId)
+      .in("source_row_hash", part);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) if (row.source_row_hash) existing.add(row.source_row_hash);
+  }
+
+  const unknownSkus = new Set<string>();
+  const unknownSuppliers = new Set<string>();
+  const seen = new Set<string>();
+  let duplicates = 0;
+  const inserts: Database["public"]["Tables"]["purchase_orders"]["Insert"][] = [];
+
+  for (const po of pos) {
+    const product = productBySku.get(po.sku);
+    if (!product) {
+      unknownSkus.add(po.sku);
+      continue;
+    }
+    if (existing.has(po.rowHash) || seen.has(po.rowHash)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(po.rowHash);
+
+    let supplierId: string | null = null;
+    if (po.supplierCode) supplierId = supplierIdByCode.get(po.supplierCode.toLowerCase()) ?? null;
+    if (!supplierId && po.supplierName) {
+      supplierId = supplierIdByName.get(po.supplierName.toLowerCase()) ?? null;
+    }
+    if (!supplierId && (po.supplierCode || po.supplierName)) {
+      unknownSuppliers.add(po.supplierCode ?? po.supplierName ?? "");
+    }
+
+    inserts.push({
+      org_id: orgId,
+      product_id: product.id,
+      supplier_id: supplierId,
+      quantity: po.quantity,
+      received_quantity: po.receivedQuantity,
+      // The column is NOT NULL; the product's recorded cost is the honest fallback.
+      unit_cost: po.unitCost ?? product.unitCost,
+      status: po.status,
+      expected_at: po.expectedAt,
+      ordered_at: po.orderedAt,
+      source_row_hash: po.rowHash,
+      import_batch_id: batchId,
+    });
+  }
+
+  for (const part of chunk(inserts, 500)) {
+    const { error } = await supabase.from("purchase_orders").insert(part);
+    if (error) throw new Error(error.message);
+  }
+
+  return {
+    inserted: inserts.length,
+    duplicates,
+    unknownSkus: [...unknownSkus].slice(0, 25),
+    unknownSuppliers: [...unknownSuppliers].slice(0, 25),
+  };
 }

@@ -13,6 +13,7 @@ export type EntityKind =
   | "transactions"
   | "customers"
   | "channels"
+  | "purchase_orders"
   | "ignored";
 
 export interface EntityDefinition {
@@ -59,6 +60,11 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   currency_code: ["currency", "currency_code", "ccy"],
   original_amount: ["original_amount", "amount_original", "document_amount", "local_amount"],
   source_ref: ["source_ref", "document_no", "document_number", "invoice_no", "invoice_number", "order_no", "order_number", "line_id", "transaction_id"],
+  po_ref: ["po_number", "po_no", "po_ref", "purchase_order", "purchase_order_number", "po_id", "po"],
+  po_status: ["po_status", "status", "order_status", "state"],
+  ordered_at: ["ordered_at", "po_date", "placed_date", "date_ordered", "created_date", "raised_date"],
+  expected_at: ["expected_at", "eta", "expected_date", "expected_delivery", "delivery_date", "due_date", "promised_date", "arrival_date"],
+  received_quantity: ["received_quantity", "received_qty", "qty_received", "quantity_received"],
 };
 
 export const ENTITY_DEFINITIONS: EntityDefinition[] = [
@@ -117,6 +123,14 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "Sales channel or route-to-market master.",
     required: ["channel_name"],
     optional: ["channel_code"],
+  },
+  {
+    kind: "purchase_orders",
+    label: "Purchase orders",
+    description:
+      "Open or historical purchase orders: one row per PO line. Suppliers are matched to existing suppliers by code or name. Feeds ETA-phased supply into Supply Planning.",
+    required: ["sku", "quantity"],
+    optional: ["po_ref", "po_status", "supplier_code", "supplier_name", "unit_cost", "ordered_at", "expected_at", "received_quantity"],
   },
 ];
 

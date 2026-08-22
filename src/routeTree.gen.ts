@@ -19,6 +19,7 @@ import { Route as AuthenticatedInventoryRouteImport } from './routes/_authentica
 import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedSupplyPlanningRouteImport } from './routes/_authenticated/supply-planning'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
 
 const IndexRoute = IndexRouteImport.update({
@@ -73,6 +74,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSupplyPlanningRoute =
+  AuthenticatedSupplyPlanningRouteImport.update({
+    id: '/supply-planning',
+    path: '/supply-planning',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSkuSkuRoute = AuthenticatedSkuSkuRouteImport.update({
   id: '/sku/$sku',
   path: '/sku/$sku',
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRoutesByTo {
@@ -101,6 +109,7 @@ export interface FileRoutesByTo {
   '/overview': typeof AuthenticatedOverviewRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRoutesById {
@@ -115,6 +124,7 @@ export interface FileRoutesById {
   '/_authenticated/overview': typeof AuthenticatedOverviewRoute
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/supply-planning': typeof AuthenticatedSupplyPlanningRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
 }
 export interface FileRouteTypes {
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/overview'
     | '/recommendations'
     | '/settings'
+    | '/supply-planning'
     | '/sku/$sku'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/overview'
     | '/recommendations'
     | '/settings'
+    | '/supply-planning'
     | '/sku/$sku'
   id:
     | '__root__'
@@ -154,6 +166,7 @@ export interface FileRouteTypes {
     | '/_authenticated/overview'
     | '/_authenticated/recommendations'
     | '/_authenticated/settings'
+    | '/_authenticated/supply-planning'
     | '/_authenticated/sku/$sku'
   fileRoutesById: FileRoutesById
 }
@@ -236,6 +249,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/supply-planning': {
+      id: '/_authenticated/supply-planning'
+      path: '/supply-planning'
+      fullPath: '/supply-planning'
+      preLoaderRoute: typeof AuthenticatedSupplyPlanningRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sku/$sku': {
       id: '/_authenticated/sku/$sku'
       path: '/sku/$sku'
@@ -253,6 +273,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedSupplyPlanningRoute: typeof AuthenticatedSupplyPlanningRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
 }
 
@@ -263,6 +284,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedSupplyPlanningRoute: AuthenticatedSupplyPlanningRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
 }
 

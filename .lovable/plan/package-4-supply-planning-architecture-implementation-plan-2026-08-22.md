@@ -7,6 +7,7 @@ Verified against the codebase and the live database on 2026-08-22.
 ### What exists that Supply Planning reuses
 
 **Demand (Package 3)**
+
 - `getDemandPlan` server fn (`src/lib/ionic.functions.ts`): auth + Zod + server-side org resolution; returns plan, planning rows, filter options, policy, last run.
 - `src/lib/demand/series.ts` — facts → buckets at a grain with coverage descriptor and honest downgrade. Day/week only from `sales_transactions`; monthly from `sales`.
 - `src/lib/demand/baseline.ts` — trailing average over `demandWindowMonths`, growth-adjusted by `demandGrowthPct`, projected over `planningHorizonDays`; carries assumptions, limitations, sufficiency flag, and variability (CV with labelled thresholds).
@@ -14,6 +15,7 @@ Verified against the codebase and the live database on 2026-08-22.
 - `src/lib/domain/time-grain.ts` — bucketStart/bucketEnd/shiftRange for day→year. Reused as-is for planning periods; no duplicate grain logic.
 
 **Inventory engine (authoritative, unchanged)**
+
 - `src/lib/engine/inventory-engine.ts` — per SKU: avgDailyDemand, daysOfCover, safetyStock, reorderPoint, targetStock, excessUnits, classification (REORDER/WATCH/HOLD/EXCESS), MOQ rounding (`applyMoq`), data-quality issues (missing lead time is blocking), structured explanation. Config resolved via `resolveEngineConfig(policy)`.
 - `buildRecommendationView` / `loadSignals` (`src/lib/data/repository.ts`) — products joined to suppliers; lead time resolution product → supplier → policy default with `leadTimeSource` provenance; aggregate on-hand/on-order across per-location positions; earliest ETA from placed POs.
 
@@ -60,27 +62,29 @@ Package 4 consumes Package 3's building blocks (`bucketise`, `computeBaseline`, 
 
 ## 3. Data availability matrix
 
-| Input | Exists? | Current source | Sufficient? | Package 4 change |
-|---|---|---|---|---|
-| Demand plan | Yes | Package 3 baseline per SKU | Yes, at month grain | None — reuse |
-| On-hand inventory | Yes | `inventory.on_hand` (per location, aggregated) | Yes | None |
-| Allocated inventory | **No** | — | No | Not added; report "available = on hand, no allocation data" |
-| On-order inventory | Partial | `inventory.on_order` aggregate | Partial: quantity yes, schedule no | Treated as unscheduled supply unless a PO ETA exists |
-| Safety stock | Yes | engine: `avgDaily × safetyStockDays` (product → policy) | Yes | None |
-| Target stock | Yes | engine: lead time + review period + safety | Yes | None (policy overrides stay stored-only) |
-| Supplier | Yes | `products.supplier_id` → `suppliers` | Partial: single supplier per product; no supplier SKU refs, status, or locations | None (limitation stated) |
-| Lead time | Yes | product → supplier → policy, with provenance | Mostly: 5 products missing (already blocking) | None; missing lead time blocks timing, never invents one |
-| Lead-time variability | Field only | policy `leadTimeVariabilityDays` (stored-only) | No observed data | Not activated; risk shown from engine stockout flag instead |
-| MOQ | Yes | product → supplier → policy | Yes (2 products fall back) | Reuse `applyMoq` |
-| Order multiple | Yes | policy `orderMultiple` | Yes | Reuse `applyMoq` |
-| Unit cost | Yes | `products.unit_cost`; `purchase_orders.unit_cost` | Yes for demo data | None |
-| Currency | Column only | `sales_transactions.currency_code` (unpopulated) | No | Report single-currency assumption; no FX, no conversion |
-| ETA | Schema only | `purchase_orders.expected_at`; **0 PO rows** | No | Minimal PO ingestion (below); ETA absent → "unscheduled" |
-| Delivery delay | No | no actual/receipt dates anywhere | No | Additive `received_quantity`/`ordered_at` only; delay analytics deferred |
-| PO status | Yes (enum) | `purchase_orders.status` | Schema yes, data no | Same ingestion path |
-| Production constraint | No | — | No | Out of scope, reported |
-| Tariff | No | — | No | Later package (with landed cost) |
-| FX | No | — | No | Later package; never invented |
+
+| Input                 | Exists?     | Current source                                          | Sufficient?                                                                      | Package 4 change                                                         |
+| --------------------- | ----------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Demand plan           | Yes         | Package 3 baseline per SKU                              | Yes, at month grain                                                              | None — reuse                                                             |
+| On-hand inventory     | Yes         | `inventory.on_hand` (per location, aggregated)          | Yes                                                                              | None                                                                     |
+| Allocated inventory   | **No**      | —                                                       | No                                                                               | Not added; report "available = on hand, no allocation data"              |
+| On-order inventory    | Partial     | `inventory.on_order` aggregate                          | Partial: quantity yes, schedule no                                               | Treated as unscheduled supply unless a PO ETA exists                     |
+| Safety stock          | Yes         | engine: `avgDaily × safetyStockDays` (product → policy) | Yes                                                                              | None                                                                     |
+| Target stock          | Yes         | engine: lead time + review period + safety              | Yes                                                                              | None (policy overrides stay stored-only)                                 |
+| Supplier              | Yes         | `products.supplier_id` → `suppliers`                    | Partial: single supplier per product; no supplier SKU refs, status, or locations | None (limitation stated)                                                 |
+| Lead time             | Yes         | product → supplier → policy, with provenance            | Mostly: 5 products missing (already blocking)                                    | None; missing lead time blocks timing, never invents one                 |
+| Lead-time variability | Field only  | policy `leadTimeVariabilityDays` (stored-only)          | No observed data                                                                 | Not activated; risk shown from engine stockout flag instead              |
+| MOQ                   | Yes         | product → supplier → policy                             | Yes (2 products fall back)                                                       | Reuse `applyMoq`                                                         |
+| Order multiple        | Yes         | policy `orderMultiple`                                  | Yes                                                                              | Reuse `applyMoq`                                                         |
+| Unit cost             | Yes         | `products.unit_cost`; `purchase_orders.unit_cost`       | Yes for demo data                                                                | None                                                                     |
+| Currency              | Column only | `sales_transactions.currency_code` (unpopulated)        | No                                                                               | Report single-currency assumption; no FX, no conversion                  |
+| ETA                   | Schema only | `purchase_orders.expected_at`; **0 PO rows**            | No                                                                               | Minimal PO ingestion (below); ETA absent → "unscheduled"                 |
+| Delivery delay        | No          | no actual/receipt dates anywhere                        | No                                                                               | Additive `received_quantity`/`ordered_at` only; delay analytics deferred |
+| PO status             | Yes (enum)  | `purchase_orders.status`                                | Schema yes, data no                                                              | Same ingestion path                                                      |
+| Production constraint | No          | —                                                       | No                                                                               | Out of scope, reported                                                   |
+| Tariff                | No          | —                                                       | No                                                                               | Later package (with landed cost)                                         |
+| FX                    | No          | —                                                       | No                                                                               | Later package; never invented                                            |
+
 
 ## 4. Proposed data-model changes (minimum additive)
 
@@ -98,7 +102,8 @@ New pure module `src/lib/supply/` (no React, no Supabase — same discipline as 
 
 - `position.ts` — per SKU: on hand, on order (scheduled vs unscheduled), planned demand per period (from `computeBaseline` on that SKU's facts), safety stock / reorder point / target from the engine's metrics.
 - `projection.ts` — time-phased projection at month grain (week only where transactions exist): walking forward from today, each period `projected = previous − plannedDemand + scheduledReceipts`. Outputs per period: projected on hand, first period below safety stock, first period below zero (projected stockout). Unscheduled on-order is shown separately and never silently booked into a period.
-- `netting.ts` — net requirement = `max(0, targetStock − lowestProjectedPosition)`; replenishment timing = first deficit period minus lead time (order-by date); suggested quantity = `applyMoq(netRequirement, moq, orderMultiple)` — reusing the engine's helper, not a copy. No lead time → no timing and no quantity: the row is flagged "Supplier lead time unavailable", consistent with the engine's blocking rule.
+- `netting.ts` — net requirement = `max(0, targetStock − lowestProjectedPosition)`; The target stock used by Supply Planning must come from the existing authoritative inventory-engine calculation and must not independently resolve or activate the currently stored-only targetStockLevel, daysOfCoverTarget, minimumStockLevel or reorderPointOverride policy fields.
+  Supply Planning must use the same target-stock definition as the existing engine so that Demand Planning, Inventory and Supply Planning do not produce competing definitions of the required stock position. Replenishment timing = first deficit period minus lead time (order-by date); suggested quantity = `applyMoq(netRequirement, moq, orderMultiple)` — reusing the engine's helper, not a copy. No lead time → no timing and no quantity: the row is flagged "Supplier lead time unavailable", consistent with the engine's blocking rule.
 - `risk.ts` — supply risk flags derived only from real inputs: projected stockout before earliest receipt; lead time missing; ETA unknown for open supply; engine action EXCESS (procurement suppressed); MOQ forces over-order above target (quantity shown with the adjustment stated).
 - `explain.ts` — per-row structured explanation: inputs (demand plan, position, open supply, policy values used), method in words, output, limitations. Mirrors the engine's `Explanation` pattern.
 
@@ -106,19 +111,21 @@ New pure module `src/lib/supply/` (no React, no Supabase — same discipline as 
 
 **Scenario readiness:** the pipeline is one pure function `buildSupplyPlan({facts, positions, supply, policy, overrides?})` with `overrides` defaulting to empty. Scenario Planning later supplies overrides (growth, lead time, MOQ) without restructuring. No scenario versioning now.
 
-**Engine signal interaction:** the engine action is displayed as-is alongside the supply plan. Combinations are honoured rather than assumed: EXCESS + rising demand still suppresses procurement while projected cover exceeds the excess threshold; REORDER + adequate scheduled receipts produces "no action — supply already inbound"; low stock never auto-purchases without net requirement after receipts.
+**Engine signal interaction:** the engine action is displayed as-is alongside the supply plan. Combinations are honoured rather than assumed: Engine classifications remain authoritative for the current inventory state, but Supply Planning must evaluate the forward projection separately. An EXCESS classification may suppress immediate replenishment where projected inventory remains sufficient, but it must not permanently suppress future supply requirements if the time-phased projection later falls below the required stock position. Similarly, REORDER does not automatically create a supply requirement if scheduled receipts already satisfy the projected requirement; REORDER + adequate scheduled receipts produces "no action — supply already inbound"; low stock never auto-purchases without net requirement after receipts.
 
 **Procurement avoidance (Package 4 scope):** informational only. Where a SKU is held at multiple locations, the per-location positions already loaded are compared: a location whose standalone cover exceeds the excess threshold while the aggregate plan shows a net requirement is flagged "possible redistribution — review locations before purchasing". No transfer orders, no optimisation; the flag is the documented hook Distribution Planning will consume.
 
 ## 6. Policy parameters — Package 4 classification
 
-| Parameter | Classification |
-|---|---|
-| `demandWindowMonths`, `planningHorizonDays`, `demandGrowthPct` | Already active (demand baseline) |
-| `safetyStockDays`, `defaultLeadTimeDays`, `defaultMinOrderQty`, `orderMultiple` | Already active (engine) — reused, not re-read |
+
+| Parameter                                                                            | Classification                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demandWindowMonths`, `planningHorizonDays`, `demandGrowthPct`                       | Already active (demand baseline)                                                                                                                                                              |
+| `safetyStockDays`, `defaultLeadTimeDays`, `defaultMinOrderQty`, `orderMultiple`      | Already active (engine) — reused, not re-read                                                                                                                                                 |
 | `daysOfCoverTarget`, `targetStockLevel`, `minimumStockLevel`, `reorderPointOverride` | **Stay stored-only.** Activating overrides would create a second, competing target/ROP definition against the engine's computed values. Flagged as a product decision, not silently activated |
-| `serviceLevel`, `leadTimeVariabilityDays`, `demandVariability` | Later package — require observed variability/receipts data that does not exist; no statistical safety stock in Package 4 |
-| `seasonalityEnabled` | Later package — needs ≥24 months of history |
+| `serviceLevel`, `leadTimeVariabilityDays`, `demandVariability`                       | Later package — require observed variability/receipts data that does not exist; no statistical safety stock in Package 4                                                                      |
+| `seasonalityEnabled`                                                                 | Later package — needs ≥24 months of history                                                                                                                                                   |
+
 
 No new policy fields, no duplicated storage. Settings grouping updated so the active/stored split reflects the above.
 
@@ -129,7 +136,7 @@ One new nav item, "Supply Planning", between Demand Planning and Inventory. No v
 Route `src/routes/_authenticated/supply-planning.tsx` reusing `AppShell`, `PlanningFilters`, panels, `StatusBadge`, `useProductLabel`, recharts:
 
 - Shared filter bar (search, category, supplier, location; date range and grain where meaningful). Unavailable dimensions stay disabled with reasons, as today.
-- Summary strip: SKUs with a net requirement; total suggested spend; SKUs with projected stockout inside the horizon; rows blocked by missing data.
+- Summary strip: SKUs with a net requirement; total suggested procurement value, only where a consistent currency is available; otherwise show "Not available" and the reason; Never aggregate monetary values across currencies without an explicit conversion method. No FX conversion is performed in Package 4; SKUs with projected stockout inside the horizon; rows blocked by missing data.
 - Supply plan table (per SKU): on hand; on order (scheduled ETA / unscheduled); planned demand per period; projected low point and first stockout period; net requirement; suggested quantity after MOQ/multiple with the adjustment stated; order-by date; supplier and lead time with provenance; engine action badge; risk flags; procurement-avoidance hint.
 - Per-SKU detail (expand or drill to existing SKU page): projected inventory line with safety-stock and reorder-point reference lines and scheduled receipt markers.
 - "Why this supply plan" panel: inputs, method in words, outputs, limitations — always present, same pattern as Demand Planning.
@@ -155,7 +162,8 @@ Current cost profile: `buildRecommendationView` recomputes the whole workspace p
 
 ## 11. Risks / unknowns
 
-1. **No PO data exists today.** Until a user imports purchase orders, the supply plan's receipt phasing is empty and `on_order` is unscheduled. The UI must say this plainly; the value of the package still stands on net requirement and order-by timing from the demand plan.
+1. **No PO data exists today.** Until a user imports purchase orders, the supply plan's receipt phasing is empty and `on_order` is unscheduled. The UI must say this plainly; the value of the package still stands on net requirement and order-by timing from the demand plan. The purchase-order ingestion added in Package 4 is a data-ingestion foundation only. It does not create a PO management workflow, approval workflow, editing interface, receiving workflow or procurement execution capability.
+  Imported POs are treated as external source data consumed by Supply Planning.
 2. **On-order without ETA** is structurally ambiguous (ordered yesterday vs arriving tomorrow). Package 4 reports it as unscheduled rather than guessing; whether to optionally phase it at "today + lead time" *labelled as an estimate* is a product decision left open.
 3. **Target/ROP policy overrides** (stored-only today) will eventually need a ruling: engine-computed vs planner-override precedence.
 4. **Single supplier per product** constrains sourcing decisions; a supplier-product table is a later architectural step.
