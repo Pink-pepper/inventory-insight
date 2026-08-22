@@ -111,9 +111,9 @@ describe("buildDistributionPlan", () => {
       supplyRows: [
         supplyRow({
           sku: "SKU-1",
-          netRequirement: 50,
+          netRequirement: 105,
           locations: [
-            { location: "LOC-A", onHand: 500, onOrder: 0, asOf: "2026-08-01" },
+            { location: "LOC-A", onHand: 100, onOrder: 0, asOf: "2026-08-01" },
             { location: "LOC-B", onHand: 0, onOrder: 0, asOf: "2026-08-01" },
             { location: "LOC-C", onHand: 300, onOrder: 0, asOf: "2026-08-01" },
           ],
@@ -125,8 +125,11 @@ describe("buildDistributionPlan", () => {
       filter: {},
     });
     const s = plan.suggestions[0]!;
+    // LOC-A excess = 100 − 26 = 74; LOC-B need = 105 → LOC-C contributes the remaining 31.
     expect(s.legs.every((l) => l.toLocation === "LOC-B")).toBe(true);
-    expect(s.legs.some((l) => l.fromLocation === "LOC-C")).toBe(true);
+    expect(s.legs).toContainEqual({ fromLocation: "LOC-A", toLocation: "LOC-B", quantity: 74 });
+    expect(s.legs).toContainEqual({ fromLocation: "LOC-C", toLocation: "LOC-B", quantity: 31 });
+    expect(s.totalQuantity).toBe(105);
     expect(s.notes.some((n) => n.includes("LOC-C"))).toBe(true);
   });
 
