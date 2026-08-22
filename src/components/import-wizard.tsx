@@ -56,6 +56,12 @@ interface ImportOutcome {
   stats: { rowsRead: number; rowsAccepted: number; rowsRejected: number; warnings: number };
   issues: ImportIssue[];
   transactions: { inserted: number; duplicates: number; unknownSkus: string[] };
+  purchaseOrders: {
+    inserted: number;
+    duplicates: number;
+    unknownSkus: string[];
+    unknownSuppliers: string[];
+  };
   evaluated: number;
 }
 
@@ -380,6 +386,20 @@ export function ImportWizard() {
                 : ""}
               {outcome.transactions.unknownSkus.length
                 ? ` · unknown SKUs skipped: ${outcome.transactions.unknownSkus.join(", ")}`
+                : ""}
+            </p>
+          ) : null}
+          {outcome.purchaseOrders?.inserted || outcome.purchaseOrders?.duplicates ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {num(outcome.purchaseOrders.inserted)} purchase order lines stored
+              {outcome.purchaseOrders.duplicates
+                ? ` · ${num(outcome.purchaseOrders.duplicates)} already imported previously and skipped`
+                : ""}
+              {outcome.purchaseOrders.unknownSkus.length
+                ? ` · unknown SKUs skipped: ${outcome.purchaseOrders.unknownSkus.join(", ")}`
+                : ""}
+              {outcome.purchaseOrders.unknownSuppliers.length
+                ? ` · suppliers not matched to the supplier master: ${outcome.purchaseOrders.unknownSuppliers.join(", ")}`
                 : ""}
             </p>
           ) : null}
