@@ -4,6 +4,7 @@ import type {
   AuditDetailValue,
   AuditEvent,
   CanonicalDataset,
+  CanonicalPurchaseOrder,
   ConnectorType,
   DataSource,
   InventoryPosition,
