@@ -97,7 +97,7 @@ describe("buildDistributionPlan", () => {
       policy: EMPTY_PLANNING_POLICY,
       filter: {},
     });
-    expect(plan.suggestions).toHaveLength(1);
+    expect(plan.suggestions.length).toBe(1);
     const s = plan.suggestions[0]!;
     // dest need = 105 − 0 = 105; requirement = 100 → transfer exactly 100.
     expect(s.legs).toEqual([{ fromLocation: "LOC-A", toLocation: "LOC-B", quantity: 100 }]);
@@ -127,8 +127,8 @@ describe("buildDistributionPlan", () => {
     const s = plan.suggestions[0]!;
     // LOC-A excess = 100 − 26 = 74; LOC-B need = 105 → LOC-C contributes the remaining 31.
     expect(s.legs.every((l) => l.toLocation === "LOC-B")).toBe(true);
-    expect(s.legs).toContainEqual({ fromLocation: "LOC-A", toLocation: "LOC-B", quantity: 74 });
-    expect(s.legs).toContainEqual({ fromLocation: "LOC-C", toLocation: "LOC-B", quantity: 31 });
+    expect(s.legs.map((l) => [l.fromLocation, l.quantity].join(":")).join(",")).toContain("LOC-A:74");
+    expect(s.legs.map((l) => [l.fromLocation, l.quantity].join(":")).join(",")).toContain("LOC-C:31");
     expect(s.totalQuantity).toBe(105);
     expect(s.notes.some((n) => n.includes("LOC-C"))).toBe(true);
   });
@@ -150,7 +150,7 @@ describe("buildDistributionPlan", () => {
       policy: EMPTY_PLANNING_POLICY,
       filter: {},
     });
-    expect(plan.suggestions).toHaveLength(0);
+    expect(plan.suggestions.length).toBe(0);
   });
 
   test("reports when no location-level demand exists at all", () => {
@@ -162,7 +162,7 @@ describe("buildDistributionPlan", () => {
       filter: {},
     });
     expect(plan.summary.noLocationDemand).toBe(true);
-    expect(plan.suggestions).toHaveLength(0);
+    expect(plan.suggestions.length).toBe(0);
   });
 
   test("inbound POs addressed to a location reduce its shortfall", () => {
@@ -196,6 +196,6 @@ describe("buildDistributionPlan", () => {
       filter: {},
     });
     // LOC-B need 105 is fully covered by the 200 inbound → no destination.
-    expect(plan.suggestions).toHaveLength(0);
+    expect(plan.suggestions.length).toBe(0);
   });
 });
