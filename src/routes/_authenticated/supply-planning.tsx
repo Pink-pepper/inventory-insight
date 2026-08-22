@@ -59,6 +59,11 @@ function SupplyPlanningPage() {
     <AppShell
       title="Supply planning"
       description="What supply is required, when it is required, and what could prevent it from being fulfilled."
+      actions={
+        <Button asChild size="sm" variant="outline">
+          <Link to="/purchasing">Purchasing</Link>
+        </Button>
+      }
     >
       {isLoading ? (
         <Loading label="Building the supply plan" />

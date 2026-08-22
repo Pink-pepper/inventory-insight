@@ -15,8 +15,10 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedDataSourcesRouteImport } from './routes/_authenticated/data-sources'
 import { Route as AuthenticatedDemandPlanningRouteImport } from './routes/_authenticated/demand-planning'
+import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
+import { Route as AuthenticatedPurchasingRouteImport } from './routes/_authenticated/purchasing'
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSupplyPlanningRouteImport } from './routes/_authenticated/supply-planning'
@@ -53,6 +55,12 @@ const AuthenticatedDemandPlanningRoute =
     path: '/demand-planning',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDistributionRoute =
+  AuthenticatedDistributionRouteImport.update({
+    id: '/distribution',
+    path: '/distribution',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -61,6 +69,11 @@ const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
 const AuthenticatedOverviewRoute = AuthenticatedOverviewRouteImport.update({
   id: '/overview',
   path: '/overview',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPurchasingRoute = AuthenticatedPurchasingRouteImport.update({
+  id: '/purchasing',
+  path: '/purchasing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedRecommendationsRoute =
@@ -92,8 +105,10 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/demand-planning': typeof AuthenticatedDemandPlanningRoute
+  '/distribution': typeof AuthenticatedDistributionRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
+  '/purchasing': typeof AuthenticatedPurchasingRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
@@ -105,8 +120,10 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/demand-planning': typeof AuthenticatedDemandPlanningRoute
+  '/distribution': typeof AuthenticatedDistributionRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/overview': typeof AuthenticatedOverviewRoute
+  '/purchasing': typeof AuthenticatedPurchasingRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
@@ -120,8 +137,10 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/data-sources': typeof AuthenticatedDataSourcesRoute
   '/_authenticated/demand-planning': typeof AuthenticatedDemandPlanningRoute
+  '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/overview': typeof AuthenticatedOverviewRoute
+  '/_authenticated/purchasing': typeof AuthenticatedPurchasingRoute
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/supply-planning': typeof AuthenticatedSupplyPlanningRoute
@@ -135,8 +154,10 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/data-sources'
     | '/demand-planning'
+    | '/distribution'
     | '/inventory'
     | '/overview'
+    | '/purchasing'
     | '/recommendations'
     | '/settings'
     | '/supply-planning'
@@ -148,8 +169,10 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/data-sources'
     | '/demand-planning'
+    | '/distribution'
     | '/inventory'
     | '/overview'
+    | '/purchasing'
     | '/recommendations'
     | '/settings'
     | '/supply-planning'
@@ -162,8 +185,10 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/data-sources'
     | '/_authenticated/demand-planning'
+    | '/_authenticated/distribution'
     | '/_authenticated/inventory'
     | '/_authenticated/overview'
+    | '/_authenticated/purchasing'
     | '/_authenticated/recommendations'
     | '/_authenticated/settings'
     | '/_authenticated/supply-planning'
@@ -221,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDemandPlanningRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/distribution': {
+      id: '/_authenticated/distribution'
+      path: '/distribution'
+      fullPath: '/distribution'
+      preLoaderRoute: typeof AuthenticatedDistributionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/inventory': {
       id: '/_authenticated/inventory'
       path: '/inventory'
@@ -233,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/overview'
       fullPath: '/overview'
       preLoaderRoute: typeof AuthenticatedOverviewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/purchasing': {
+      id: '/_authenticated/purchasing'
+      path: '/purchasing'
+      fullPath: '/purchasing'
+      preLoaderRoute: typeof AuthenticatedPurchasingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/recommendations': {
@@ -269,8 +308,10 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDataSourcesRoute: typeof AuthenticatedDataSourcesRoute
   AuthenticatedDemandPlanningRoute: typeof AuthenticatedDemandPlanningRoute
+  AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
+  AuthenticatedPurchasingRoute: typeof AuthenticatedPurchasingRoute
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSupplyPlanningRoute: typeof AuthenticatedSupplyPlanningRoute
@@ -280,8 +321,10 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDataSourcesRoute: AuthenticatedDataSourcesRoute,
   AuthenticatedDemandPlanningRoute: AuthenticatedDemandPlanningRoute,
+  AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
+  AuthenticatedPurchasingRoute: AuthenticatedPurchasingRoute,
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSupplyPlanningRoute: AuthenticatedSupplyPlanningRoute,

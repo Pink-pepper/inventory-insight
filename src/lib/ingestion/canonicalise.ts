@@ -8,6 +8,7 @@ import type {
   CanonicalSale,
   CanonicalSupplier,
   CanonicalTransaction,
+  PurchaseOrderApprovalStatus,
   PurchaseOrderStatus,
 } from "@/lib/domain/model";
 import { csvConnector } from "@/lib/connectors/csv-connector";
@@ -332,13 +333,24 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           if (expectedRaw?.trim() && !expectedAt) {
             log.add(sheet.sheetName, rowNo, "expected_at", `Unrecognised expected date "${safeText(expectedRaw)}". The line is kept as unscheduled supply.`, "warning");
           }
+          const receivedRaw = get(row, "received_at");
+          const receivedAt = parseDate(receivedRaw);
+          if (receivedRaw?.trim() && !receivedAt) {
+            log.add(sheet.sheetName, rowNo, "received_at", `Unrecognised receipt date "${safeText(receivedRaw)}". The row is kept without it.`, "warning");
+          }
+          const currency = parseCurrency(get(row, "currency_code"));
+          if (get(row, "currency_code") && !currency) {
+            log.add(sheet.sheetName, rowNo, "currency_code", `"${get(row, "currency_code")}" is not a three-letter currency code and was not stored.`, "warning");
+          }
           const status = parsePoStatus(get(row, "po_status"), (message) =>
             log.add(sheet.sheetName, rowNo, "po_status", message, "warning"),
           );
+          const approvalStatus = parsePoApproval(get(row, "po_status"), get(row, "approval_status"));
           referenced.add(sku);
           purchaseOrders.push({
             poRef: safeText(get(row, "po_ref")) || null,
             status,
+            approvalStatus,
             sku,
             supplierCode: safeText(get(row, "supplier_code")) || null,
             supplierName: safeText(get(row, "supplier_name")) || null,
@@ -347,7 +359,15 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
             unitCost: cost.value,
             orderedAt,
             expectedAt,
-            rowHash: rowHash([sku, qty.value, receivedQuantity, orderedAt, expectedAt, status, safeText(get(row, "po_ref")), safeText(get(row, "supplier_code")) || safeText(get(row, "supplier_name"))]),
+            receivedAt,
+            location: safeText(get(row, "location")) || null,
+            currencyCode: currency,
+            buyer: safeText(get(row, "buyer")) || null,
+            // The fingerprint identifies the business LINE only. Mutable
+            // operational fields (status, approvals, receipts, dates) are
+            // updated in place on re-import and never join the hash — an
+            // updated PO must be recognised as the same PO.
+            rowHash: rowHash([sku, qty.value, safeText(get(row, "po_ref")), safeText(get(row, "supplier_code")) || safeText(get(row, "supplier_name"))]),
           });
           rowsAccepted++;
           return;
@@ -402,6 +422,9 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
  * Maps a source status word onto the canonical PO lifecycle. Unknown values
  * are kept as "placed" with a warning — the outstanding quantity still
  * represents real expected supply, so the row is not dropped over vocabulary.
+ *
+ * Lifecycle only: approval is parsed separately (parsePoApproval) so the two
+ * dimensions never share one field.
  */
 const PO_STATUS_MAP: Record<string, PurchaseOrderStatus> = {
   draft: "draft",
@@ -412,12 +435,15 @@ const PO_STATUS_MAP: Record<string, PurchaseOrderStatus> = {
   ordered: "placed",
   sent: "placed",
   in_progress: "placed",
+  partially_received: "placed",
+  partial: "placed",
   received: "received",
-  closed: "received",
   complete: "received",
   completed: "received",
   delivered: "received",
   fulfilled: "received",
+  closed: "closed",
+  rejected: "cancelled",
   cancelled: "cancelled",
   canceled: "cancelled",
   void: "cancelled",
@@ -430,4 +456,24 @@ function parsePoStatus(raw: string, warn: (message: string) => void): PurchaseOr
   if (mapped) return mapped;
   warn(`Unknown purchase order status "${safeText(raw)}" — treated as placed.`);
   return "placed";
+}
+
+/**
+ * Approval signal, kept independent of the lifecycle. An explicit approval
+ * column wins; then a clear approval/rejection word in the status; known
+ * lifecycle words describing real external orders imply approval happened;
+ * drafts, blanks and unknown vocabulary need review.
+ */
+function parsePoApproval(statusRaw: string, approvalRaw: string): PurchaseOrderApprovalStatus {
+  const explicit = safeText(approvalRaw).toLowerCase().replace(/[\s-]+/g, "_");
+  if (["approved", "approve", "yes", "true"].includes(explicit)) return "approved";
+  if (["rejected", "declined"].includes(explicit)) return "rejected";
+  if (["needs_review", "pending", "pending_approval", "unapproved", "draft", "no", "false"].includes(explicit)) {
+    return "needs_review";
+  }
+  const key = safeText(statusRaw).toLowerCase().replace(/[\s-]+/g, "_");
+  if (key === "rejected") return "rejected";
+  if (key === "" || key === "draft") return "needs_review";
+  if (PO_STATUS_MAP[key]) return "approved";
+  return "needs_review";
 }

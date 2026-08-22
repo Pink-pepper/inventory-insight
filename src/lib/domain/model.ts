@@ -97,6 +97,11 @@ export interface CanonicalPurchaseOrder {
   /** Purchase order reference from the source system, when present. */
   poRef: string | null;
   status: PurchaseOrderStatus;
+  /**
+   * Approval signal carried by the source data, when one exists. Distinct
+   * from the fulfilment lifecycle — a PO can be approved and still open.
+   */
+  approvalStatus: PurchaseOrderApprovalStatus;
   sku: string;
   supplierCode: string | null;
   supplierName: string | null;
@@ -106,6 +111,12 @@ export interface CanonicalPurchaseOrder {
   unitCost: number | null;
   orderedAt: string | null;
   expectedAt: string | null;
+  /** Actual delivery date, when the source reports one. */
+  receivedAt: string | null;
+  /** Receiving location code, matched to the workspace's locations. */
+  location: string | null;
+  currencyCode: string | null;
+  buyer: string | null;
   /** Deterministic fingerprint of the business fields, for re-import detection. */
   rowHash: string;
 }
@@ -172,7 +183,13 @@ export interface AuditEvent {
   occurredAt: string;
 }
 
-export type PurchaseOrderStatus = "draft" | "placed" | "received" | "cancelled";
+/**
+ * PO lifecycle (fulfilment-side vocabulary). Approval state is a separate
+ * dimension — never fold the two into one status.
+ */
+export type PurchaseOrderStatus = "draft" | "placed" | "received" | "closed" | "cancelled";
+
+export type PurchaseOrderApprovalStatus = "needs_review" | "approved" | "rejected";
 
 /** An inbound order against a SKU. */
 export interface PurchaseOrder {
@@ -183,6 +200,31 @@ export interface PurchaseOrder {
   unitCost: number;
   status: PurchaseOrderStatus;
   expectedAt: string | null;
+}
+
+/** A stored purchase order line as the PO Inbox talks about it. */
+export interface PurchaseOrderRecord {
+  id: string;
+  poNumber: string | null;
+  sku: string | null;
+  productName: string | null;
+  supplierName: string | null;
+  supplierCode: string | null;
+  quantity: number;
+  receivedQuantity: number;
+  outstanding: number;
+  unitCost: number;
+  currencyCode: string | null;
+  status: PurchaseOrderStatus;
+  approvalStatus: PurchaseOrderApprovalStatus;
+  orderedAt: string | null;
+  expectedAt: string | null;
+  receivedAt: string | null;
+  locationCode: string | null;
+  locationName: string | null;
+  buyer: string | null;
+  importBatchId: string | null;
+  createdAt: string;
 }
 
 /** Provenance of a stored recommendation run. */

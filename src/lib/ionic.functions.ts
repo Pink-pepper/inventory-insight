@@ -12,6 +12,7 @@ import {
   getProfile,
   listAuditEvents,
   listDataSources,
+  listPurchaseOrders,
   loadDemandFacts,
   loadOpenSupply,
   persistDataset,
@@ -20,6 +21,7 @@ import {
   regenerateRecommendations,
   resolveOrg,
   savePlanningPolicy,
+  updatePurchaseOrderApproval,
 } from "@/lib/data/repository";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 import { canonicalise, type SheetPlan } from "@/lib/ingestion/canonicalise";
@@ -38,6 +40,7 @@ import {
 } from "@/lib/query/filters";
 import { buildDemandPlan, filterOptions } from "@/lib/demand/plan";
 import { buildSupplyPlan } from "@/lib/supply/plan";
+import { buildDistributionPlan } from "@/lib/distribution/plan";
 
 /**
  * Supply Planning: demand plan + inventory position + open purchase orders →
@@ -64,6 +67,33 @@ export const getSupplyPlan = createServerFn({ method: "POST" })
       options: filterOptions(facts),
       policy,
       lastRun,
+      calculatedAt: new Date().toISOString(),
+    };
+  });
+
+/**
+ * Distribution Planning: the supply plan's purchase requirements checked
+ * against per-location excess. A transfer suggestion only ever substitutes
+ * for a requirement the supply plan already computed — it never invents one.
+ */
+export const getDistributionPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ filter: planningFilterSchema.optional() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filter: PlanningFilter = data.filter ?? {};
+    const [facts, policy, rows, openSupply] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      buildRecommendationView(supabase, orgId),
+      loadOpenSupply(supabase, orgId),
+    ]);
+    const supply = buildSupplyPlan({ facts, engineRows: rows, openSupply, policy, filter });
+    const plan = buildDistributionPlan({ supplyRows: supply.rows, facts, openSupply, policy, filter });
+    return {
+      ...plan,
+      options: filterOptions(facts),
       calculatedAt: new Date().toISOString(),
     };
   });
@@ -525,7 +555,9 @@ export const importUpload = createServerFn({ method: "POST" })
       transactions: tx.inserted,
       duplicates: tx.duplicates,
       purchase_orders: pos.inserted,
+      purchase_orders_updated: pos.updated,
       po_duplicates: pos.duplicates,
+      po_unknown_locations: pos.unknownLocations.length,
     });
     await audit(supabase, orgId, userId, "recommendations.generated", {
       evaluated: run.evaluated,
@@ -543,4 +575,46 @@ export const importUpload = createServerFn({ method: "POST" })
       evaluated: run.evaluated,
       run,
     };
+  });
+
+/**
+ * PO Inbox: every purchase order line in the workspace with derived
+ * fulfilment status. Any member may read; only owners and admins may change
+ * approval state (setPurchaseOrderApproval).
+ */
+export const getPurchaseOrders = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    const orders = await listPurchaseOrders(supabase, orgId);
+    return { orders, canApprove: role === "owner" || role === "admin" };
+  });
+
+const PO_APPROVAL_ACTIONS = ["approved", "rejected", "needs_review"] as const;
+
+/** Sets a PO's approval state. Restricted to workspace owners and admins. */
+export const setPurchaseOrderApproval = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z
+      .object({
+        poId: z.string().uuid(),
+        approvalStatus: z.enum(PO_APPROVAL_ACTIONS),
+      })
+      .parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change purchase order approvals.");
+    }
+    const updated = await updatePurchaseOrderApproval(supabase, orgId, data.poId, data.approvalStatus);
+    if (!updated) throw new Error("Purchase order not found in this workspace.");
+    await audit(supabase, orgId, userId, "po.approval_changed", {
+      po_id: data.poId,
+      approval_status: data.approvalStatus,
+    });
+    return { ok: true };
   });

@@ -62,9 +62,12 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   source_ref: ["source_ref", "document_no", "document_number", "invoice_no", "invoice_number", "order_no", "order_number", "line_id", "transaction_id"],
   po_ref: ["po_number", "po_no", "po_ref", "purchase_order", "purchase_order_number", "po_id", "po"],
   po_status: ["po_status", "status", "order_status", "state"],
+  approval_status: ["approval_status", "approval", "approval_state", "approved"],
   ordered_at: ["ordered_at", "po_date", "placed_date", "date_ordered", "created_date", "raised_date"],
   expected_at: ["expected_at", "eta", "expected_date", "expected_delivery", "delivery_date", "due_date", "promised_date", "arrival_date"],
   received_quantity: ["received_quantity", "received_qty", "qty_received", "quantity_received"],
+  received_at: ["received_at", "received_date", "actual_delivery", "actual_delivery_date", "goods_received_date", "delivered_date"],
+  buyer: ["buyer", "planner", "purchaser", "buyer_name", "ordered_by", "purchased_by"],
 };
 
 export const ENTITY_DEFINITIONS: EntityDefinition[] = [
@@ -128,9 +131,23 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     kind: "purchase_orders",
     label: "Purchase orders",
     description:
-      "Open or historical purchase orders: one row per PO line. Suppliers are matched to existing suppliers by code or name. Feeds ETA-phased supply into Supply Planning.",
+      "Open or historical purchase orders: one row per PO line. Suppliers are matched to existing suppliers by code or name. Feeds ETA-phased supply into Supply Planning and the Purchasing inbox.",
     required: ["sku", "quantity"],
-    optional: ["po_ref", "po_status", "supplier_code", "supplier_name", "unit_cost", "ordered_at", "expected_at", "received_quantity"],
+    optional: [
+      "po_ref",
+      "po_status",
+      "approval_status",
+      "supplier_code",
+      "supplier_name",
+      "unit_cost",
+      "ordered_at",
+      "expected_at",
+      "received_quantity",
+      "received_at",
+      "location",
+      "currency_code",
+      "buyer",
+    ],
   },
 ];
 
