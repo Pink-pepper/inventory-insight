@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { getPurchaseOrders, setPurchaseOrderApproval } from "@/lib/ionic.functions";
 import type { PurchaseOrderRecord } from "@/lib/domain/model";
 import {
-  approvalLabel,
-  fulfilmentLabel,
+  APPROVAL_LABELS,
+  FULFILMENT_LABELS,
   fulfilmentStatus,
 } from "@/lib/domain/purchase-order";
 import { money, num } from "@/lib/format";
@@ -254,11 +254,11 @@ function PurchasingPage() {
                         </td>
                         <td className="px-3 py-2.5">
                           <Pill tone={APPROVAL_TONE[po.approvalStatus]}>
-                            {approvalLabel(po.approvalStatus)}
+                            {APPROVAL_LABELS[po.approvalStatus]}
                           </Pill>
                         </td>
                         <td className="px-3 py-2.5">
-                          <Pill tone={FULFILMENT_TONE[fulfilment]}>{fulfilmentLabel(fulfilment)}</Pill>
+                          <Pill tone={FULFILMENT_TONE[fulfilment]}>{FULFILMENT_LABELS[fulfilment]}</Pill>
                         </td>
                         {data?.canApprove ? (
                           <td className="px-3 py-2.5">
