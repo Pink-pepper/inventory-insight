@@ -133,7 +133,11 @@ function SupplyPlanningPage() {
                 <div className="panel border-l-2 border-l-primary px-4 py-3 text-sm text-muted-foreground">
                   {data.summary.excessLocationOpportunities} location(s) hold stock far beyond their
                   own requirement on SKUs that otherwise need purchasing — redistribution may avoid
-                  new procurement. See the flagged rows below.
+                  new procurement. See the flagged rows below, or open{" "}
+                  <Link to="/distribution" className="text-primary underline-offset-4 hover:underline">
+                    Distribution planning
+                  </Link>{" "}
+                  for concrete transfer suggestions.
                 </div>
               ) : null}
 
