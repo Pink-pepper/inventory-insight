@@ -12,10 +12,15 @@ Verified current state:
 
 ## Plan
 
-1. One cleanup migration, scoped to the affected organisation and the two test SKUs only:
-   - Delete the 2 `sales` rows and 2 `sales_transactions` rows for SKU-1 / SKU-2.
-   - Delete the 2 `products` rows (and any `inventory` rows for them, if present).
-   - Keep the `import_batches` records — they are the audit trail of what was imported.
+1. One cleanup migration, scoped to the affected organisation and the two test SKUs only.
+  Before deletion, assert that the affected organisation contains exactly the expected test records:
+  - exactly 2 products with SKUs SKU-1 and SKU-2;
+  - those products were created by the identified Package 2 test import;
+  - only the expected 2 sales rows and 2 sales_transactions rows are associated with them.
+  If the expected state does not match, abort the migration rather than performing a broader deletion. Do not use a broad condition such as "delete any product named SKU-1/SKU-2" across organisations.
+  - Delete the 2 `sales` rows and 2 `sales_transactions` rows for SKU-1 / SKU-2.
+  - Delete the 2 `products` rows (and any `inventory` rows for them, if present).
+  - Keep the `import_batches` records — they are the audit trail of what was imported.
 2. Verify afterwards: product count returns to 50, demand-planning and inventory workspaces render unchanged, and `sales` totals reflect only demo data.
 
 ## Notes
