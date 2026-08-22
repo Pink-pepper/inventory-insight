@@ -210,6 +210,7 @@ function supplyLine(partial: Partial<OpenSupplyLine> & { sku: string }): OpenSup
     outstanding: 0,
     expectedAt: null,
     orderedAt: null,
+    locationCode: null,
     ...partial,
   };
 }

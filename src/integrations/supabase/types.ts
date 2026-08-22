@@ -528,14 +528,20 @@ export type Database = {
       }
       purchase_orders: {
         Row: {
+          approval_status: Database["public"]["Enums"]["po_approval_status"]
+          buyer: string | null
           created_at: string
+          currency_code: string | null
           expected_at: string | null
           id: string
           import_batch_id: string | null
+          location_id: string | null
           ordered_at: string | null
           org_id: string
+          po_number: string | null
           product_id: string | null
           quantity: number
+          received_at: string | null
           received_quantity: number
           source_row_hash: string | null
           status: Database["public"]["Enums"]["po_status"]
@@ -543,14 +549,20 @@ export type Database = {
           unit_cost: number
         }
         Insert: {
+          approval_status?: Database["public"]["Enums"]["po_approval_status"]
+          buyer?: string | null
           created_at?: string
+          currency_code?: string | null
           expected_at?: string | null
           id?: string
           import_batch_id?: string | null
+          location_id?: string | null
           ordered_at?: string | null
           org_id: string
+          po_number?: string | null
           product_id?: string | null
           quantity?: number
+          received_at?: string | null
           received_quantity?: number
           source_row_hash?: string | null
           status?: Database["public"]["Enums"]["po_status"]
@@ -558,14 +570,20 @@ export type Database = {
           unit_cost?: number
         }
         Update: {
+          approval_status?: Database["public"]["Enums"]["po_approval_status"]
+          buyer?: string | null
           created_at?: string
+          currency_code?: string | null
           expected_at?: string | null
           id?: string
           import_batch_id?: string | null
+          location_id?: string | null
           ordered_at?: string | null
           org_id?: string
+          po_number?: string | null
           product_id?: string | null
           quantity?: number
+          received_at?: string | null
           received_quantity?: number
           source_row_hash?: string | null
           status?: Database["public"]["Enums"]["po_status"]
@@ -593,6 +611,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
           },
           {
             foreignKeyName: "purchase_orders_org_product_fkey"
@@ -900,7 +925,8 @@ export type Database = {
         | "netsuite"
         | "custom_api"
       org_role: "owner" | "admin" | "member"
-      po_status: "draft" | "placed" | "received" | "cancelled"
+      po_approval_status: "needs_review" | "approved" | "rejected"
+      po_status: "draft" | "placed" | "received" | "cancelled" | "closed"
       rec_action: "REORDER" | "WATCH" | "HOLD" | "EXCESS"
     }
     CompositeTypes: {
@@ -1038,7 +1064,8 @@ export const Constants = {
         "custom_api",
       ],
       org_role: ["owner", "admin", "member"],
-      po_status: ["draft", "placed", "received", "cancelled"],
+      po_approval_status: ["needs_review", "approved", "rejected"],
+      po_status: ["draft", "placed", "received", "cancelled", "closed"],
       rec_action: ["REORDER", "WATCH", "HOLD", "EXCESS"],
     },
   },

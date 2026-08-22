@@ -12,7 +12,7 @@
  * no Supabase, no React.
  */
 import type { OpenSupplyLine, RecommendationRow } from "@/lib/data/repository";
-import type { LeadTimeSource, RecommendationAction } from "@/lib/domain/model";
+import type { InventoryPosition, LeadTimeSource, RecommendationAction } from "@/lib/domain/model";
 import type { PlanningPolicy } from "@/lib/domain/planning-policy";
 import { DEFAULT_ENGINE_CONFIG, resolveEngineConfig } from "@/lib/engine/inventory-engine";
 import { buildSeries, type DemandFact } from "@/lib/demand/series";
@@ -49,6 +49,10 @@ export interface SupplyPlanRow {
   minOrderQty: number;
   unitCost: number;
   onHand: number;
+  /** Per-location stock positions, for distribution analysis and detail views. */
+  locations: InventoryPosition[];
+  avgDailyDemand: number;
+  safetyStockDays: number;
   /** Aggregate on-order from inventory positions, as recorded. */
   onOrder: number;
   /** Outstanding PO quantity with an expected date, phased into the projection. */
@@ -252,6 +256,9 @@ export function buildSupplyPlan({ facts, engineRows, openSupply, policy, filter 
       minOrderQty: row.minOrderQty,
       unitCost: row.unitCost,
       onHand: row.onHand,
+      locations: row.locations,
+      avgDailyDemand: row.avgDailyDemand,
+      safetyStockDays: row.safetyStockDays,
       onOrder: row.onOrder,
       scheduledInbound,
       unscheduledOnOrder,
