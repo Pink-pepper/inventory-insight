@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Boxes,
   TrendingUp,
+  Truck,
   ClipboardList,
   Database,
   Settings,

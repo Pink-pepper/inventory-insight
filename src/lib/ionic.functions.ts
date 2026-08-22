@@ -13,7 +13,9 @@ import {
   listAuditEvents,
   listDataSources,
   loadDemandFacts,
+  loadOpenSupply,
   persistDataset,
+  persistPurchaseOrders,
   persistTransactions,
   regenerateRecommendations,
   resolveOrg,
@@ -35,6 +37,36 @@ import {
   type PlanningFilter,
 } from "@/lib/query/filters";
 import { buildDemandPlan, filterOptions } from "@/lib/demand/plan";
+import { buildSupplyPlan } from "@/lib/supply/plan";
+
+/**
+ * Supply Planning: demand plan + inventory position + open purchase orders →
+ * net requirement, order-by dates, and explicit fulfilment risks. Everything
+ * is computed on the fly from authoritative tables — nothing is pre-computed.
+ */
+export const getSupplyPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ filter: planningFilterSchema.optional() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filter: PlanningFilter = data.filter ?? {};
+    const [facts, policy, rows, openSupply, lastRun] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      buildRecommendationView(supabase, orgId),
+      loadOpenSupply(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    const plan = buildSupplyPlan({ facts, engineRows: rows, openSupply, policy, filter });
+    return {
+      ...plan,
+      options: filterOptions(facts),
+      policy,
+      lastRun,
+      calculatedAt: new Date().toISOString(),
+    };
+  });
 
 export const getDemandPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -359,6 +391,7 @@ const ENTITY_KINDS = [
   "transactions",
   "customers",
   "channels",
+  "purchase_orders",
   "ignored",
 ] as const;
 
@@ -443,7 +476,8 @@ export const importUpload = createServerFn({ method: "POST" })
       result.dataset.products.length === 0 &&
       result.dataset.inventory.length === 0 &&
       result.dataset.sales.length === 0 &&
-      (result.dataset.transactions?.length ?? 0) === 0
+      (result.dataset.transactions?.length ?? 0) === 0 &&
+      (result.dataset.purchaseOrders?.length ?? 0) === 0
     ) {
       throw new Error(
         result.issues.find((i) => i.severity === "error")?.message ??
@@ -467,6 +501,7 @@ export const importUpload = createServerFn({ method: "POST" })
 
     const counts = await persistDataset(supabase, orgId, result.dataset);
     const tx = await persistTransactions(supabase, orgId, result.dataset, batchId);
+    const pos = await persistPurchaseOrders(supabase, orgId, result.dataset.purchaseOrders, batchId);
 
     const { error: dsError } = await supabase.from("data_sources").insert({
       org_id: orgId,
@@ -489,6 +524,8 @@ export const importUpload = createServerFn({ method: "POST" })
       rows_rejected: result.stats.rowsRejected,
       transactions: tx.inserted,
       duplicates: tx.duplicates,
+      purchase_orders: pos.inserted,
+      po_duplicates: pos.duplicates,
     });
     await audit(supabase, orgId, userId, "recommendations.generated", {
       evaluated: run.evaluated,
@@ -500,6 +537,7 @@ export const importUpload = createServerFn({ method: "POST" })
       batchId,
       ...counts,
       transactions: tx,
+      purchaseOrders: pos,
       issues: result.issues,
       stats: result.stats,
       evaluated: run.evaluated,
