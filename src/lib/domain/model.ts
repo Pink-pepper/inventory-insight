@@ -88,6 +88,28 @@ export interface CanonicalTransaction {
   rowHash: string;
 }
 
+/**
+ * A single purchase order line as any source describes it. Supply Planning
+ * phases the outstanding quantity by its expected date; nothing is inferred
+ * when the date is absent — the supply is reported as unscheduled.
+ */
+export interface CanonicalPurchaseOrder {
+  /** Purchase order reference from the source system, when present. */
+  poRef: string | null;
+  status: PurchaseOrderStatus;
+  sku: string;
+  supplierCode: string | null;
+  supplierName: string | null;
+  quantity: number;
+  receivedQuantity: number;
+  /** Line unit cost; persistence falls back to the product's recorded cost. */
+  unitCost: number | null;
+  orderedAt: string | null;
+  expectedAt: string | null;
+  /** Deterministic fingerprint of the business fields, for re-import detection. */
+  rowHash: string;
+}
+
 /** A complete ingestion payload produced by any connector. */
 export interface CanonicalDataset {
   suppliers: CanonicalSupplier[];
@@ -97,6 +119,7 @@ export interface CanonicalDataset {
   customers?: CanonicalCustomer[];
   channels?: CanonicalChannel[];
   transactions?: CanonicalTransaction[];
+  purchaseOrders?: CanonicalPurchaseOrder[];
 }
 
 /** A stock position at a single physical location. */
