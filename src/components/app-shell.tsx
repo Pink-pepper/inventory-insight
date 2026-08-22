@@ -21,6 +21,7 @@ const NAV = [
   { to: "/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/demand-planning", label: "Demand Planning", icon: TrendingUp },
   { to: "/inventory", label: "Inventory", icon: Boxes },
+  { to: "/supply-planning", label: "Supply Planning", icon: Truck },
   { to: "/recommendations", label: "Recommendations", icon: ClipboardList },
   { to: "/data-sources", label: "Data Sources", icon: Database },
   { to: "/settings", label: "Settings", icon: Settings },
