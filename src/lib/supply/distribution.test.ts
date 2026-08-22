@@ -125,10 +125,10 @@ describe("buildDistributionPlan", () => {
       filter: {},
     });
     const s = plan.suggestions[0]!;
-    // LOC-A excess = 100 − 26 = 74; LOC-B need = 105 → LOC-C contributes the remaining 31.
+    // Sources are drained largest-excess first: LOC-C (300, no history) before
+    // LOC-A (100 − 26 keeps = 74). LOC-B need = 105 → one leg covers it.
     expect(s.legs.every((l) => l.toLocation === "LOC-B")).toBe(true);
-    expect(s.legs.map((l) => [l.fromLocation, l.quantity].join(":")).join(",")).toContain("LOC-A:74");
-    expect(s.legs.map((l) => [l.fromLocation, l.quantity].join(":")).join(",")).toContain("LOC-C:31");
+    expect(s.legs).toEqual([{ fromLocation: "LOC-C", toLocation: "LOC-B", quantity: 105 }]);
     expect(s.totalQuantity).toBe(105);
     expect(s.notes.some((n) => n.includes("LOC-C"))).toBe(true);
   });
