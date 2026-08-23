@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 import type {
   AuditDetailValue,
   AuditEvent,
@@ -25,6 +25,14 @@ import {
 import { evaluateAll, resolveEngineConfig } from "@/lib/engine/inventory-engine";
 import { rowHash } from "@/lib/ingestion/validate";
 import type { DemandFact } from "@/lib/demand/series";
+import type { PlanningFilter } from "@/lib/query/filters";
+import type { ScenarioAssumptions } from "@/lib/scenario/assumptions";
+import type { ScenarioRunResult } from "@/lib/scenario/run";
+import type {
+  ScenarioRecord,
+  ScenarioRunRecord,
+  ScenarioRunSummaryRecord,
+} from "@/lib/scenario/types";
 
 export type Db = SupabaseClient<Database>;
 
@@ -1095,5 +1103,276 @@ export async function persistPurchaseOrders(
     unknownSkus: [...unknownSkus],
     unknownSuppliers: [...unknownSuppliers],
     unknownLocations: [...unknownLocations],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scenario Planning
+// ---------------------------------------------------------------------------
+
+function mapScenarioRow(
+  row: {
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+    scope: unknown;
+    assumptions: unknown;
+    created_by: string;
+    created_at: string;
+    updated_at: string;
+  },
+  latest: { version: number; created_at: string } | null,
+): ScenarioRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    status: row.status as ScenarioRecord["status"],
+    scope: (row.scope ?? {}) as ScenarioRecord["scope"],
+    assumptions: (row.assumptions ?? {}) as ScenarioRecord["assumptions"],
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    latestVersion: latest?.version ?? null,
+    latestRunAt: latest?.created_at ?? null,
+  };
+}
+
+/** All scenarios for the workspace, each with its latest run marker. */
+export async function listScenarios(supabase: Db, orgId: string): Promise<ScenarioRecord[]> {
+  const [{ data: scenarios, error }, { data: runs, error: runError }] = await Promise.all([
+    supabase
+      .from("scenarios")
+      .select("id, name, description, status, scope, assumptions, created_by, created_at, updated_at")
+      .eq("org_id", orgId)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("scenario_runs")
+      .select("scenario_id, version, created_at")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false }),
+  ]);
+  if (error) throw new Error(error.message);
+  if (runError) throw new Error(runError.message);
+  const latestByScenario = new Map<string, { version: number; created_at: string }>();
+  for (const run of runs ?? []) {
+    if (!latestByScenario.has(run.scenario_id)) {
+      latestByScenario.set(run.scenario_id, run);
+    }
+  }
+  return (scenarios ?? []).map((row) => mapScenarioRow(row, latestByScenario.get(row.id) ?? null));
+}
+
+export async function createScenario(
+  supabase: Db,
+  orgId: string,
+  userId: string,
+  input: {
+    name: string;
+    description: string | null;
+    scope: PlanningFilter;
+    assumptions: ScenarioAssumptions;
+  },
+): Promise<ScenarioRecord> {
+  const { data, error } = await supabase
+    .from("scenarios")
+    .insert({
+      org_id: orgId,
+      name: input.name,
+      description: input.description,
+      scope: input.scope,
+      assumptions: input.assumptions,
+      created_by: userId,
+    })
+    .select("id, name, description, status, scope, assumptions, created_by, created_at, updated_at")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapScenarioRow(data, null);
+}
+
+export async function updateScenario(
+  supabase: Db,
+  orgId: string,
+  scenarioId: string,
+  patch: {
+    name?: string;
+    description?: string | null;
+    status?: ScenarioRecord["status"];
+    scope?: PlanningFilter;
+    assumptions?: ScenarioAssumptions;
+  },
+): Promise<ScenarioRecord> {
+  const fields: Database["public"]["Tables"]["scenarios"]["Update"] = {};
+  if (patch.name !== undefined) fields["name"] = patch.name;
+  if (patch.description !== undefined) fields["description"] = patch.description;
+  if (patch.status !== undefined) fields["status"] = patch.status;
+  if (patch.scope !== undefined) fields["scope"] = patch.scope as unknown as Json;
+  if (patch.assumptions !== undefined) fields["assumptions"] = patch.assumptions as unknown as Json;
+  const { data, error } = await supabase
+    .from("scenarios")
+    .update(fields)
+    .eq("org_id", orgId)
+    .eq("id", scenarioId)
+    .select("id, name, description, status, scope, assumptions, created_by, created_at, updated_at")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Scenario not found.");
+  const { data: latestRun } = await supabase
+    .from("scenario_runs")
+    .select("version, created_at")
+    .eq("org_id", orgId)
+    .eq("scenario_id", scenarioId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return mapScenarioRow(data, latestRun);
+}
+
+/** Deletion is restricted to owner/admin by RLS. Runs cascade with the scenario. */
+export async function deleteScenario(
+  supabase: Db,
+  orgId: string,
+  scenarioId: string,
+): Promise<void> {
+  const { error, count } = await supabase
+    .from("scenarios")
+    .delete({ count: "exact" })
+    .eq("org_id", orgId)
+    .eq("id", scenarioId);
+  if (error) throw new Error(error.message);
+  if (count === 0) throw new Error("Scenario not found, or your role cannot delete it.");
+}
+
+/** One scenario plus its run history (summaries only). */
+export async function getScenario(
+  supabase: Db,
+  orgId: string,
+  scenarioId: string,
+): Promise<{ scenario: ScenarioRecord; runs: ScenarioRunSummaryRecord[] }> {
+  const { data, error } = await supabase
+    .from("scenarios")
+    .select("id, name, description, status, scope, assumptions, created_by, created_at, updated_at")
+    .eq("org_id", orgId)
+    .eq("id", scenarioId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Scenario not found.");
+  const { data: runs, error: runError } = await supabase
+    .from("scenario_runs")
+    .select("id, scenario_id, version, baseline_summary, scenario_summary, created_by, created_at")
+    .eq("org_id", orgId)
+    .eq("scenario_id", scenarioId)
+    .order("version", { ascending: false });
+  if (runError) throw new Error(runError.message);
+  return {
+    scenario: mapScenarioRow(data, runs?.[0] ?? null),
+    runs: (runs ?? []).map((r) => ({
+      id: r.id,
+      scenarioId: r.scenario_id,
+      version: r.version,
+      baselineSummary: r.baseline_summary as unknown as ScenarioRunSummaryRecord["baselineSummary"],
+      scenarioSummary: r.scenario_summary as unknown as ScenarioRunSummaryRecord["scenarioSummary"],
+      createdBy: r.created_by,
+      createdAt: r.created_at,
+    })),
+  };
+}
+
+/**
+ * Persists one run snapshot. The version is the next integer for the scenario;
+ * on the (rare) concurrent-run conflict the insert fails and the caller
+ * retries once with a freshly computed version.
+ */
+export async function insertScenarioRun(
+  supabase: Db,
+  orgId: string,
+  userId: string,
+  scenarioId: string,
+  snapshot: {
+    assumptions: ScenarioAssumptions;
+    scope: PlanningFilter;
+    result: ScenarioRunResult;
+    inputProvenance: ScenarioRunRecord["inputProvenance"];
+  },
+): Promise<{ id: string; version: number }> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data: latest } = await supabase
+      .from("scenario_runs")
+      .select("version")
+      .eq("org_id", orgId)
+      .eq("scenario_id", scenarioId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const version = (latest?.version ?? 0) + 1;
+    const { data, error } = await supabase
+      .from("scenario_runs")
+      .insert({
+        org_id: orgId,
+        scenario_id: scenarioId,
+        version,
+        assumptions: snapshot.assumptions as unknown as Json,
+        scope: snapshot.scope as unknown as Json,
+        baseline_summary: snapshot.result.baselineSummary as unknown as Json,
+        scenario_summary: snapshot.result.scenarioSummary as unknown as Json,
+        row_results: {
+          summaryComparison: snapshot.result.summaryComparison,
+          rows: snapshot.result.rows,
+          rowsTruncated: snapshot.result.rowsTruncated,
+          explanation: snapshot.result.explanation,
+          assumptionLines: snapshot.result.assumptionLines,
+          horizonStart: snapshot.result.horizonStart,
+          horizonPeriods: snapshot.result.horizonPeriods,
+        } as unknown as Json,
+        input_provenance: snapshot.inputProvenance as unknown as Json,
+        created_by: userId,
+      })
+      .select("id, version")
+      .maybeSingle();
+    if (!error && data) return data;
+    if (error && attempt === 0 && error.code === "23505") continue; // version race: retry
+    if (error) throw new Error(error.message);
+    throw new Error("Run could not be recorded.");
+  }
+  throw new Error("Run could not be recorded.");
+}
+
+/** The full immutable snapshot of one run. */
+export async function getScenarioRun(
+  supabase: Db,
+  orgId: string,
+  runId: string,
+): Promise<ScenarioRunRecord> {
+  const { data, error } = await supabase
+    .from("scenario_runs")
+    .select(
+      "id, scenario_id, version, assumptions, scope, baseline_summary, scenario_summary, row_results, input_provenance, created_by, created_at",
+    )
+    .eq("org_id", orgId)
+    .eq("id", runId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Scenario run not found.");
+  const stored = data.row_results as unknown as Omit<
+    ScenarioRunResult,
+    "baselineSummary" | "scenarioSummary"
+  >;
+  const baselineSummary =
+    data.baseline_summary as unknown as ScenarioRunRecord["baselineSummary"];
+  const scenarioSummary =
+    data.scenario_summary as unknown as ScenarioRunRecord["scenarioSummary"];
+  return {
+    id: data.id,
+    scenarioId: data.scenario_id,
+    version: data.version,
+    assumptions: (data.assumptions ?? {}) as ScenarioAssumptions,
+    scope: (data.scope ?? {}) as PlanningFilter,
+    baselineSummary,
+    scenarioSummary,
+    result: { ...stored, baselineSummary, scenarioSummary },
+    inputProvenance: data.input_provenance as unknown as ScenarioRunRecord["inputProvenance"],
+    createdBy: data.created_by,
+    createdAt: data.created_at,
   };
 }

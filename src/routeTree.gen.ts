@@ -22,6 +22,8 @@ import { Route as AuthenticatedPurchasingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSupplyPlanningRouteImport } from './routes/_authenticated/supply-planning'
+import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
+import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
 
 const IndexRoute = IndexRouteImport.update({
@@ -93,6 +95,18 @@ const AuthenticatedSupplyPlanningRoute =
     path: '/supply-planning',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedScenariosIndexRoute =
+  AuthenticatedScenariosIndexRouteImport.update({
+    id: '/scenarios/',
+    path: '/scenarios/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedScenariosScenarioIdRoute =
+  AuthenticatedScenariosScenarioIdRouteImport.update({
+    id: '/scenarios/$scenarioId',
+    path: '/scenarios/$scenarioId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSkuSkuRoute = AuthenticatedSkuSkuRouteImport.update({
   id: '/sku/$sku',
   path: '/sku/$sku',
@@ -112,7 +126,9 @@ export interface FileRoutesByFullPath {
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
+  '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -127,7 +143,9 @@ export interface FileRoutesByTo {
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
+  '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/scenarios': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -144,7 +162,9 @@ export interface FileRoutesById {
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/supply-planning': typeof AuthenticatedSupplyPlanningRoute
+  '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,7 +181,9 @@ export interface FileRouteTypes {
     | '/recommendations'
     | '/settings'
     | '/supply-planning'
+    | '/scenarios/$scenarioId'
     | '/sku/$sku'
+    | '/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -176,7 +198,9 @@ export interface FileRouteTypes {
     | '/recommendations'
     | '/settings'
     | '/supply-planning'
+    | '/scenarios/$scenarioId'
     | '/sku/$sku'
+    | '/scenarios'
   id:
     | '__root__'
     | '/'
@@ -192,7 +216,9 @@ export interface FileRouteTypes {
     | '/_authenticated/recommendations'
     | '/_authenticated/settings'
     | '/_authenticated/supply-planning'
+    | '/_authenticated/scenarios/$scenarioId'
     | '/_authenticated/sku/$sku'
+    | '/_authenticated/scenarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -295,6 +321,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSupplyPlanningRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/scenarios/': {
+      id: '/_authenticated/scenarios/'
+      path: '/scenarios'
+      fullPath: '/scenarios/'
+      preLoaderRoute: typeof AuthenticatedScenariosIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/scenarios/$scenarioId': {
+      id: '/_authenticated/scenarios/$scenarioId'
+      path: '/scenarios/$scenarioId'
+      fullPath: '/scenarios/$scenarioId'
+      preLoaderRoute: typeof AuthenticatedScenariosScenarioIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sku/$sku': {
       id: '/_authenticated/sku/$sku'
       path: '/sku/$sku'
@@ -315,7 +355,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSupplyPlanningRoute: typeof AuthenticatedSupplyPlanningRoute
+  AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
+  AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -328,7 +370,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSupplyPlanningRoute: AuthenticatedSupplyPlanningRoute,
+  AuthenticatedScenariosScenarioIdRoute: AuthenticatedScenariosScenarioIdRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
+  AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

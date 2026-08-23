@@ -858,6 +858,113 @@ export type Database = {
           },
         ]
       }
+      scenario_runs: {
+        Row: {
+          assumptions: Json
+          baseline_summary: Json
+          created_at: string
+          created_by: string
+          id: string
+          input_provenance: Json
+          org_id: string
+          row_results: Json
+          scenario_id: string
+          scenario_summary: Json
+          scope: Json
+          version: number
+        }
+        Insert: {
+          assumptions: Json
+          baseline_summary: Json
+          created_at?: string
+          created_by: string
+          id?: string
+          input_provenance: Json
+          org_id: string
+          row_results: Json
+          scenario_id: string
+          scenario_summary: Json
+          scope?: Json
+          version: number
+        }
+        Update: {
+          assumptions?: Json
+          baseline_summary?: Json
+          created_at?: string
+          created_by?: string
+          id?: string
+          input_provenance?: Json
+          org_id?: string
+          row_results?: Json
+          scenario_id?: string
+          scenario_summary?: Json
+          scope?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenario_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scenario_runs_org_id_scenario_id_fkey"
+            columns: ["org_id", "scenario_id"]
+            isOneToOne: false
+            referencedRelation: "scenarios"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      scenarios: {
+        Row: {
+          assumptions: Json
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          org_id: string
+          scope: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assumptions?: Json
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          org_id: string
+          scope?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assumptions?: Json
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          scope?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenarios_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           code: string | null
