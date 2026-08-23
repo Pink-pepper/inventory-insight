@@ -8,7 +8,13 @@ import { AppShell, useWorkspace } from "@/components/app-shell";
 import { ImportWizard } from "@/components/import-wizard";
 import { Pill } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { getAuditLog, ingestDataset } from "@/lib/ionic.functions";
+import {
+  deleteImportBatch,
+  getAuditLog,
+  getImportBatches,
+  ingestDataset,
+  setImportBatchActive,
+} from "@/lib/ionic.functions";
 import { num } from "@/lib/format";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 
