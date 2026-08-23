@@ -1473,12 +1473,14 @@ export async function persistMovements(
   const movements = rows ?? [];
   if (movements.length === 0) return empty;
 
-  const { data: products, error: pErr } = await supabase
-    .from("products")
-    .select("id, sku")
-    .eq("org_id", orgId);
+  const [{ data: products, error: pErr }, { data: locations, error: lErr }] = await Promise.all([
+    supabase.from("products").select("id, sku").eq("org_id", orgId),
+    supabase.from("locations").select("id, code").eq("org_id", orgId),
+  ]);
   if (pErr) throw new Error(pErr.message);
+  if (lErr) throw new Error(lErr.message);
   const productIdBySku = new Map((products ?? []).map((p) => [p.sku, p.id]));
+  const locationIdByCode = new Map((locations ?? []).map((l) => [l.code.toLowerCase(), l.id]));
 
   const hashes = [...new Set(movements.map((m) => m.rowHash))];
   const existing = new Set<string>();
@@ -1510,16 +1512,9 @@ export async function persistMovements(
     seen.add(m.rowHash);
     // Locations resolve against the location master by code; an unknown code
     // is kept as a null link rather than invented.
-    let locationId: string | null = null;
-    if (m.location) {
-      const { data: loc } = await supabase
-        .from("locations")
-        .select("id")
-        .eq("org_id", orgId)
-        .ilike("code", m.location)
-        .maybeSingle();
-      locationId = loc?.id ?? null;
-    }
+    // Locations resolve against the location master by code; an unknown code
+    // is kept as a null link rather than invented.
+    const locationId = m.location ? (locationIdByCode.get(m.location.toLowerCase()) ?? null) : null;
     inserts.push({
       org_id: orgId,
       product_id: productId,
