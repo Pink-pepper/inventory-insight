@@ -8,6 +8,7 @@ import {
 } from "./mapping";
 import { profileSheet, type ColumnProfile, type ColumnType } from "./profile";
 import { cell, type SheetTable } from "./sheet-table";
+import { inferGrain, orientationOf, type GrainInfo, type TimeOrientation } from "./grain";
 import {
   columnValues,
   findRelationships,
@@ -19,9 +20,11 @@ import { parseDate } from "./validate";
 
 /**
  * Workbook classification: decides what each sheet most likely contains, maps
- * its columns to canonical fields, detects cross-sheet relationships and
- * duplicate sources, and assigns a disposition so the UI can auto-approve the
- * obvious sheets and surface only genuine exceptions.
+ * its columns to canonical fields, infers grain and time orientation, detects
+ * cross-sheet relationships and duplicate sources, and assigns a disposition
+ * so the UI can auto-approve the obvious sheets and surface only genuine
+ * exceptions. Recognition is driven by data structure and values — never by
+ * sheet names.
  */
 
 export type DataRole =
@@ -30,14 +33,19 @@ export type DataRole =
   | "aggregate"
   | "snapshot"
   | "mixed"
+  | "forecast"
+  | "policy"
+  | "movement"
+  | "documentation"
   | "contextual"
   | "unknown";
 
 export type MappingConfidence = "high" | "medium" | "low" | "unresolved";
 
-/** auto: pre-approved · review: complete but needs a glance · blocked: required
- *  columns missing · ignored: reference/notes, excluded. */
-export type Disposition = "auto" | "review" | "blocked" | "ignored";
+/** auto: pre-approved · review: glance needed · blocked: columns missing ·
+ *  unsupported: recognised (or plausible) but Ionic has no destination ·
+ *  ignored: documentation/notes, excluded. */
+export type Disposition = "auto" | "review" | "blocked" | "unsupported" | "ignored";
 
 export interface SheetClassification {
   sheetName: string;
@@ -56,11 +64,15 @@ export interface SheetClassification {
   duplicateSource: string | null;
   disposition: Disposition;
   rowCount: number;
+  /** What one row represents, inferred from values. */
+  grain: GrainInfo;
+  /** Historical, current-state, forward-looking or policy data. */
+  timeOrientation: TimeOrientation;
 }
 
 export interface WorkbookAnalysis {
   sheets: SheetClassification[];
-  summary: { total: number; auto: number; review: number; blocked: number; ignored: number };
+  summary: { total: number; auto: number; review: number; blocked: number; unsupported: number; ignored: number };
   /** Records per detected entity (auto + review sheets). */
   entities: { kind: EntityKind; label: string; records: number }[];
   /** Distinct demand months visible across detected demand sheets. */
@@ -77,13 +89,17 @@ const ROLE_BY_KIND: Partial<Record<EntityKind, DataRole>> = {
   purchase_orders: "transactional",
   sales_monthly: "aggregate",
   combined: "mixed",
+  demand_forecast: "forecast",
+  inventory_movement: "movement",
+  planning_policy: "policy",
+  documentation: "documentation",
 };
 
-const DATE_FIELDS = new Set(["as_of", "month", "transaction_date", "ordered_at", "expected_at", "received_at"]);
+const DATE_FIELDS = new Set(["as_of", "month", "transaction_date", "ordered_at", "expected_at", "received_at", "forecast_period"]);
 const NUMERIC_FIELDS = new Set([
   "unit_cost", "unit_price", "lead_time_days", "moq", "reliability", "safety_stock_days",
   "on_hand", "on_order", "units_sold", "revenue", "cogs", "quantity",
-  "original_amount", "received_quantity",
+  "original_amount", "received_quantity", "baseline_qty", "low_qty", "high_qty", "movement_qty",
 ]);
 const ID_FIELDS = new Set(["sku", "supplier_code", "customer_ref", "channel_code", "po_ref", "source_ref"]);
 
@@ -128,6 +144,18 @@ const FIELD_LABEL: Record<string, string> = {
   received_quantity: "received quantity",
   received_at: "received date",
   buyer: "buyer",
+  forecast_period: "forecast period",
+  baseline_qty: "baseline quantity",
+  low_qty: "low scenario",
+  high_qty: "high scenario",
+  forecast_method: "forecast method",
+  movement_qty: "movement quantity",
+  movement_type: "movement type",
+  parameter: "parameter",
+  param_value: "value",
+  param_unit: "unit",
+  doc_section: "section",
+  doc_text: "notes",
 };
 
 function typeAdjustment(field: string, type: ColumnType): number {
@@ -138,6 +166,7 @@ function typeAdjustment(field: string, type: ColumnType): number {
     return -2;
   }
   if (NUMERIC_FIELDS.has(field)) {
+    if (field === "movement_qty" && type === "number") return 1;
     if (type === "number") return 1;
     if (type === "date") return -2;
     return -1;
@@ -148,7 +177,8 @@ function typeAdjustment(field: string, type: ColumnType): number {
     if (type === "number") return -0.5; // numeric SKUs exist
     return -2;
   }
-  // names / descriptive fields
+  // names / descriptive / parameter-value fields
+  if (field === "param_value") return type === "empty" ? 0 : 0.5;
   if (type === "text") return 1;
   if (type === "identifier") return 0.5;
   return -2;
@@ -158,7 +188,7 @@ function patternBonus(field: string, col: ColumnProfile): number {
   if (field === "currency_code") {
     return col.samples.length > 0 && col.samples.every((s) => /^[A-Za-z]{3}$/.test(s.trim())) ? 2 : 0;
   }
-  if (field === "month") {
+  if (field === "month" || field === "forecast_period") {
     return col.samples.some((s) => /^\d{4}[-/]\d{1,2}/.test(s.trim()) || /^[A-Za-z]{3,9}[- /]\d{4}$/.test(s.trim()))
       ? 1
       : 0;
@@ -253,11 +283,18 @@ function scoreEntity(sheet: SheetTable, profile: ColumnProfile[], def: EntityDef
   return { def, score, mapping, matches, missingRequired };
 }
 
-function emptyClassification(sheet: SheetTable, reason: string): SheetClassification {
+function baseClassification(
+  sheet: SheetTable,
+  kind: EntityKind,
+  disposition: Disposition,
+  reason: string,
+  grain: GrainInfo,
+  overrides?: Partial<SheetClassification>,
+): SheetClassification {
   return {
     sheetName: sheet.sheetName,
-    kind: "ignored",
-    role: "contextual",
+    kind,
+    role: ROLE_BY_KIND[kind] ?? (kind === "ignored" ? "contextual" : "unknown"),
     confidence: "unresolved",
     mapping: {},
     fieldReasons: [],
@@ -266,8 +303,11 @@ function emptyClassification(sheet: SheetTable, reason: string): SheetClassifica
     missingRequired: [],
     relationships: [],
     duplicateSource: null,
-    disposition: "ignored",
+    disposition,
     rowCount: sheet.rowCount,
+    grain,
+    timeOrientation: orientationOf(grain, kind),
+    ...overrides,
   };
 }
 
@@ -281,6 +321,10 @@ const REASON_BY_KIND: Partial<Record<EntityKind, string>> = {
   purchase_orders: "Purchase order lines: SKUs, quantities and dates.",
   sales_monthly: "Monthly sales totals per SKU.",
   combined: "Combined product, stock and demand columns in one sheet.",
+  demand_forecast: "Forward demand: one row per SKU and future period, with baseline and scenario bounds.",
+  inventory_movement: "Non-sales stock movement: dated consumption, adjustment or issue quantities per SKU.",
+  planning_policy: "Planning parameters: names and values rather than rows of business data.",
+  documentation: "Notes or documentation: descriptive text rather than business data.",
 };
 
 function monthSetOf(sheet: SheetTable, monthColumn: number, dateColumn: number | null): Set<string> {
@@ -293,6 +337,22 @@ function monthSetOf(sheet: SheetTable, monthColumn: number, dateColumn: number |
   return out;
 }
 
+/** Detects parameter/value sheets (planning policy inputs) by shape. */
+function policyMapping(profile: ColumnProfile[]): ColumnMapping | null {
+  const paramCol = profile.find((c) => headerScore("parameter", c) >= 1.5 && c.type === "text");
+  if (!paramCol) return null;
+  const valueCol = profile.find((c) => c.index !== paramCol.index && headerScore("param_value", c) >= 1.5);
+  if (!valueCol) return null;
+  const mapping: ColumnMapping = { parameter: paramCol.index, param_value: valueCol.index };
+  for (const field of ["param_unit", "sku", "supplier_code", "location", "doc_text"]) {
+    const col = profile.find(
+      (c) => c.index !== paramCol.index && c.index !== valueCol.index && headerScore(field, c) >= 3,
+    );
+    if (col) mapping[field] = col.index;
+  }
+  return mapping;
+}
+
 /** Full analysis of an upload: classify, link, de-duplicate, summarise. */
 export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
   const profiles = sheets.map(profileSheet);
@@ -301,10 +361,51 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
   const results = sheets.map((sheet, i) => {
     const profile = profiles[i]!;
     if (sheet.headers.length === 0 || sheet.rows.length === 0) {
-      return emptyClassification(sheet, "The sheet is empty.");
+      return baseClassification(sheet, "ignored", "ignored", "The sheet is empty.", {
+        grain: "unknown", key: "empty sheet", periodStyle: "none", distinctPeriods: 0, futureShare: null, duplicateKeyShare: 0,
+      });
     }
 
-    const scored = ENTITY_DEFINITIONS.map((def) => scoreEntity(sheet, profile, def));
+    const grain = inferGrain(sheet, profile);
+    const hasMeasure = profile.some((c) => c.type === "date" || c.type === "number");
+    const hasIds = profile.some((c) => c.type === "identifier");
+
+    // Policy sheets: parameter + value shape. Checked before documentation so
+    // numeric-less parameter sheets (e.g. yes/no settings) are still caught.
+    const polMap = policyMapping(profile);
+    if (polMap) {
+      const exact = headerScore("parameter", profile[polMap["parameter"]!]!) >= 3;
+      return baseClassification(
+        sheet,
+        "planning_policy",
+        "unsupported",
+        "Planning parameters — these become proposals against the workspace planning policy below; they are never imported as rows.",
+        grain,
+        {
+          confidence: exact ? "high" : "medium",
+          mapping: polMap,
+          fieldReasons: Object.entries(polMap).map(
+            ([f, c]) => `'${profile[c]!.header}' → ${FIELD_LABEL[f] ?? f} (header match)`,
+          ),
+        },
+      );
+    }
+
+    // Documentation: no identifiers, dates or numeric measures anywhere.
+    if (!hasMeasure && !hasIds) {
+      return baseClassification(
+        sheet,
+        "documentation",
+        "ignored",
+        "Looks like notes or documentation — descriptive text without business data. Used as context only; never imported.",
+        grain,
+        { confidence: "medium" },
+      );
+    }
+
+    const scored = ENTITY_DEFINITIONS
+      .filter((d) => !d.surfaceOnly || d.kind === "inventory_movement")
+      .map((def) => scoreEntity(sheet, profile, def));
     const valid = scored.filter((s) => s.missingRequired.length === 0 && s.score > 0);
 
     // Combined only wins when it genuinely carries stock AND demand columns.
@@ -315,7 +416,7 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     if (combinedReal) candidates.push(combined!);
 
     candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0];
+    let best = candidates[0];
 
     if (!best) {
       // Nothing fully recognised: find the nearest partial match, if any.
@@ -324,55 +425,108 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
         .sort((a, b) => Object.keys(b.mapping).length - Object.keys(a.mapping).length)[0];
       if (partial && partial.score === 0) {
         const kind = partial.def.kind;
-        return {
-          sheetName: sheet.sheetName,
+        return baseClassification(
+          sheet,
           kind,
-          role: ROLE_BY_KIND[kind] ?? "unknown",
-          confidence: "low" as MappingConfidence,
-          mapping: partial.mapping,
-          fieldReasons: partial.matches.map((m) => m.reason),
-          reason: `Partially recognised as ${partial.def.label.toLowerCase()}, but required columns are missing.`,
-          unmappedHeaders: unmappedHeaders(sheet, partial.mapping),
-          missingRequired: partial.missingRequired,
-          relationships: [],
-          duplicateSource: null,
-          disposition: "blocked" as Disposition,
-          rowCount: sheet.rowCount,
-        };
+          "blocked",
+          `Partially recognised as ${partial.def.label.toLowerCase()}, but required columns are missing.`,
+          grain,
+          {
+            confidence: "low",
+            mapping: partial.mapping,
+            fieldReasons: partial.matches.map((m) => m.reason),
+            unmappedHeaders: unmappedHeaders(sheet, partial.mapping),
+            missingRequired: partial.missingRequired,
+          },
+        );
       }
-      // Contextual sheets: no dates or numeric measures — notes, instructions.
-      const hasMeasure = profile.some((c) => c.type === "date" || c.type === "number");
-      return emptyClassification(
+      // Plausible business data with no recognised entity: surface it, never
+      // silently discard. Needs an identifier plus dated/numeric structure.
+      const plausible = hasIds && hasMeasure && profile.some((c) => c.type === "number");
+      return baseClassification(
         sheet,
-        hasMeasure
-          ? "No columns matched a known entity. Review the sample and map it manually if it belongs in the model."
-          : "Looks like notes or reference material — no data columns were found. Excluded from the import.",
+        "ignored",
+        plausible ? "unsupported" : "ignored",
+        plausible
+          ? "This looks like structured business data, but Ionic could not match it to a domain it can store. Nothing was imported — review the sample and map it manually if it belongs in the model."
+          : "No business data structure was found. Excluded from the import.",
+        grain,
+        { unmappedHeaders: sheet.headers.filter((h) => h.trim() !== "") },
       );
     }
 
-    const runnerUp = candidates[1];
+    const orientation = orientationOf(grain, best.def.kind);
+
+    // --- Domain arbitration -------------------------------------------------
+    // Forward-looking vs historical monthly data: structure first, then the
+    // period orientation breaks the tie.
+    const forecastCand = candidates.find((s) => s.def.kind === "demand_forecast");
+    const monthlyCand = candidates.find((s) => s.def.kind === "sales_monthly");
+    if (forecastCand && (best.def.kind === "sales_monthly" || best.def.kind === "demand_forecast")) {
+      if (orientation === "forward" || !monthlyCand) best = forecastCand;
+    }
+
+    // Sales vs non-sales movement: both are day-grain SKU+quantity. Movement
+    // wins only with explicit evidence (movement vocabulary or negative
+    // quantities) and the absence of commercial fields.
+    if (best.def.kind === "transactions" || best.def.kind === "inventory_movement") {
+      const movementCand = candidates.find((s) => s.def.kind === "inventory_movement");
+      const commercial = best.matches.some((m) =>
+        ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code"].includes(m.field),
+      );
+      const qtyProfile = profile[best.mapping["quantity"] ?? -1];
+      const movementVocabulary = movementCand != null;
+      const signedQuantities = qtyProfile != null && qtyProfile.negativeShare >= 0.05;
+      if (!commercial && (movementVocabulary || signedQuantities)) {
+        const mapping: ColumnMapping = { ...best.mapping };
+        if ("quantity" in mapping) {
+          mapping["movement_qty"] = mapping["quantity"]!;
+          delete mapping["quantity"];
+        }
+        const moveDef = definitionFor("inventory_movement")!;
+        return baseClassification(
+          sheet,
+          "inventory_movement",
+          "unsupported",
+          signedQuantities
+            ? "Dated signed quantities per SKU without prices or customers — this looks like consumption or stock adjustment, not sales. Ionic cannot store movements yet, so this sheet is reported but not imported."
+            : "Dated movement quantities per SKU without prices or customers — this looks like non-sales stock movement. Ionic cannot store movements yet, so this sheet is reported but not imported.",
+          grain,
+          {
+            confidence: signedQuantities ? "high" : "medium",
+            mapping,
+            fieldReasons: best.matches.map((m) => m.reason),
+            unmappedHeaders: unmappedHeaders(sheet, mapping),
+          },
+        );
+      }
+      void moveDef;
+    }
+
+    const runnerUp = candidates.filter((c) => c !== best)[0];
     const allRequiredHigh = best.def.required.every(
-      (f) => best.matches.find((m) => m.field === f)?.tier === "high",
+      (f) => best!.matches.find((m) => m.field === f)?.tier === "high",
     );
     const clearWinner = !runnerUp || best.score >= runnerUp.score * 1.25;
-    const confidence: MappingConfidence = allRequiredHigh && clearWinner ? "high" : "medium";
+    let confidence: MappingConfidence = allRequiredHigh && clearWinner ? "high" : "medium";
     const kind = best.def.kind;
+    let reason = REASON_BY_KIND[kind] ?? best.def.description;
+    let disposition: Disposition = confidence === "high" ? "auto" : "review";
 
-    return {
-      sheetName: sheet.sheetName,
-      kind,
-      role: ROLE_BY_KIND[kind] ?? "unknown",
+    // Future-dated history is ambiguous: it may be a mislabeled forecast. It
+    // is never silently imported as demand history.
+    if (kind === "sales_monthly" && orientation === "forward") {
+      confidence = "medium";
+      disposition = "review";
+      reason = "Monthly SKU quantities, but the periods are in the future — if this is a forecast, review it as Demand forecast; historical periods are required for sales history.";
+    }
+
+    return baseClassification(sheet, kind, disposition, reason, grain, {
       confidence,
       mapping: best.mapping,
       fieldReasons: best.matches.map((m) => m.reason),
-      reason: REASON_BY_KIND[kind] ?? best.def.description,
       unmappedHeaders: unmappedHeaders(sheet, best.mapping),
-      missingRequired: [],
-      relationships: [],
-      duplicateSource: null,
-      disposition: (confidence === "high" ? "auto" : "review") as Disposition,
-      rowCount: sheet.rowCount,
-    };
+    });
   });
 
   // Pass 2 — cross-sheet relationships. Master sheets contribute their key
@@ -398,7 +552,7 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     });
   }
 
-  const FACT_KINDS = new Set<EntityKind>(["transactions", "purchase_orders", "sales_monthly", "combined", "inventory"]);
+  const FACT_KINDS = new Set<EntityKind>(["transactions", "purchase_orders", "sales_monthly", "combined", "inventory", "demand_forecast"]);
   for (const { sheet, profile, result } of byName.values()) {
     if (!FACT_KINDS.has(result.kind) || result.disposition === "ignored") continue;
     const mappedColumns = new Set(Object.values(result.mapping));
@@ -458,8 +612,8 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     }
   }
 
-  const summary = { total: results.length, auto: 0, review: 0, blocked: 0, ignored: 0 };
-  for (const r of results) summary[r.disposition === "auto" ? "auto" : r.disposition === "review" ? "review" : r.disposition === "blocked" ? "blocked" : "ignored"]++;
+  const summary = { total: results.length, auto: 0, review: 0, blocked: 0, unsupported: 0, ignored: 0 };
+  for (const r of results) summary[r.disposition]++;
 
   const entityTotals = new Map<EntityKind, number>();
   const months = new Set<string>();
