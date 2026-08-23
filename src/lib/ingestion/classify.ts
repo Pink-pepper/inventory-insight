@@ -179,7 +179,7 @@ function typeAdjustment(field: string, type: ColumnType): number {
     return -2;
   }
   // names / descriptive / parameter-value fields
-  if (field === "param_value") return type === "empty" ? 0 : 0.5;
+  if (field === "param_value") return 0.5;
   if (type === "text") return 1;
   if (type === "identifier") return 0.5;
   return -2;
