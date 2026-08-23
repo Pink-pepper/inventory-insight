@@ -5,18 +5,23 @@ import { buildDemoDataset } from "@/lib/connectors/demo-dataset";
 import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
+  batchDemandFootprint,
   buildRecommendationView,
   createImportBatch,
   createScenario as createScenarioRecord,
+  deleteBatchRows,
   deleteScenario as deleteScenarioRecord,
   getEffectivePolicy,
+  getImportBatch,
   getLastRun,
   getProfile,
   getScenario as getScenarioRecord,
   getScenarioRun as getScenarioRunRecord,
+  inactiveBatchIds,
   insertScenarioRun as insertScenarioRunRecord,
   listAuditEvents,
   listDataSources,
+  listImportBatches,
   listPurchaseOrders,
   listScenarios as listScenarioRecords,
   loadDemandFacts,
@@ -25,9 +30,11 @@ import {
   persistDataset,
   persistPurchaseOrders,
   persistTransactions,
+  rebuildMonthlyForProducts,
   regenerateRecommendations,
   resolveOrg,
   savePlanningPolicy,
+  setImportBatchStatus,
   updatePurchaseOrderApproval,
   updateScenario as updateScenarioRecord,
 } from "@/lib/data/repository";
@@ -336,10 +343,33 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     if (role !== "owner" && role !== "admin") {
       throw new Error("Only workspace owners and admins can delete data.");
     }
-    for (const table of ["recommendations", "sales", "inventory", "products", "suppliers", "data_sources"] as const) {
+    // Children before parents: fact tables reference products/suppliers/
+    // locations/customers/channels via composite keys and would block or
+    // corrupt the wipe if masters were removed first. Batch records are kept
+    // (audit trail) and soft-retired instead of hard-deleted.
+    const tables = [
+      "recommendations",
+      "purchase_orders",
+      "sales_transactions",
+      "sales",
+      "inventory",
+      "products",
+      "suppliers",
+      "customers",
+      "channels",
+      "locations",
+      "data_sources",
+    ] as const;
+    for (const table of tables) {
       const { error } = await supabase.from(table).delete().eq("org_id", orgId);
       if (error) throw new Error(error.message);
     }
+    const { error: batchError } = await supabase
+      .from("import_batches")
+      .update({ status: "deleted" })
+      .eq("org_id", orgId)
+      .neq("status", "deleted");
+    if (batchError) throw new Error(batchError.message);
     await audit(supabase, orgId, userId, "data.delete", { scope: "workspace" });
     return { ok: true };
   });
