@@ -173,3 +173,66 @@ describe("workbook classification", () => {
     expect(analysis.sheets[0]!.disposition).toBe("ignored");
   });
 });
+
+describe("generalised planning-data recognition", () => {
+  // Deliberately generic names and headers — nothing may depend on a specific
+  // customer's workbook naming.
+  test("forward-looking SKU/period volumes are classified as forecasts", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Plan Figures", ["Item Ref", "Period", "Baseline", "Low", "High"], [
+        ["SKU-0001", "2026-09-01", "120", "100", "140"],
+        ["SKU-0002", "2026-09-01", "60", "50", "70"],
+        ["SKU-0003", "2026-09-01", "80", "70", "95"],
+      ]),
+    ]);
+    const fc = analysis.sheets.find((s) => s.sheetName === "Plan Figures")!;
+    expect(fc.kind).toBe("demand_forecast");
+    expect(fc.timeOrientation).toBe("forward");
+    expect(fc.disposition === "auto" || fc.disposition === "review").toBe(true);
+  });
+
+  test("historical SKU/period volumes stay sales, not forecasts", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Ledger Extract", ["Item Ref", "Period", "Units"], [
+        ["SKU-0001", "2026-01-01", "120"],
+        ["SKU-0002", "2026-01-01", "60"],
+        ["SKU-0003", "2026-01-01", "80"],
+      ]),
+    ]);
+    const s = analysis.sheets.find((s) => s.sheetName === "Ledger Extract")!;
+    expect(s.kind).toBe("sales_monthly");
+  });
+
+  test("receipts/usage style sheets are recognised as movements and not stored", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Goods Flow", ["SKU", "Date", "Received", "Issued", "Reason"], [
+        ["SKU-0001", "2026-08-01", "50", "20", "customer order"],
+        ["SKU-0002", "2026-08-02", "10", "5", "transfer"],
+        ["SKU-0003", "2026-08-03", "0", "12", "customer order"],
+      ]),
+    ]);
+    const mv = analysis.sheets.find((s) => s.sheetName === "Goods Flow")!;
+    expect(mv.kind).toBe("inventory_movement");
+    expect(mv.disposition).toBe("unsupported");
+  });
+
+  test("parameter sheets surface policy proposals without being imported as data", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Parameters", ["Parameter", "Value"], [
+        ["Lead time", "14 days"],
+        ["Safety stock", "10 days"],
+        ["Demand window", "6 months"],
+      ]),
+    ]);
+    const policy = analysis.sheets.find((s) => s.sheetName === "Parameters")!;
+    expect(policy.kind).toBe("planning_policy");
+    expect(policy.disposition).toBe("unsupported");
+    const lt = policy.proposals?.find((p) => p.field === "defaultLeadTimeDays");
+    expect(lt?.proposed).toBe(14);
+    expect(lt?.scope).toBe("organisation");
+  });
+});
