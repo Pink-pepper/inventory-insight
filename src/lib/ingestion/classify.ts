@@ -478,12 +478,18 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
         ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code"].includes(m.field),
       );
       const qtyProfile = profile[best.mapping["quantity"] ?? -1];
-      // Movement vocabulary means a column actually matched movement-specific
-      // fields (movement_qty/movement_type aliases) — not merely that the
-      // movement entity shares sku/date columns with transactions.
+      // Movement vocabulary means a header itself uses movement words
+      // (received/issued/adjustment/…) or a movement_type column matched —
+      // not merely that the movement entity shares sku/date/quantity columns
+      // with transactions.
+      const MOVEMENT_WORDS = /received|issued|issuance|adjust|consum|usage|movement|withdraw|transfer|delta|write.?off|shrink/;
       const movementVocabulary =
         movementCand != null &&
-        movementCand.matches.some((m) => m.field === "movement_qty" || m.field === "movement_type");
+        movementCand.matches.some(
+          (m) =>
+            m.field === "movement_type" ||
+            (m.field === "movement_qty" && MOVEMENT_WORDS.test(headerKey(sheet.headers[m.column] ?? ""))),
+        );
       const signedQuantities = qtyProfile != null && qtyProfile.negativeShare >= 0.05;
       if (!commercial && (movementVocabulary || signedQuantities)) {
         const mapping: ColumnMapping = { ...best.mapping };
