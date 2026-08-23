@@ -18,6 +18,7 @@ import {
   type KeySet,
 } from "./relationships";
 import { parseDate } from "./validate";
+import { movementValueShare } from "@/lib/domain/movement";
 
 /**
  * Workbook classification: decides what each sheet most likely contains, maps
@@ -64,6 +65,9 @@ export interface SheetClassification {
   /** Name of a richer sheet covering the same data (duplicate source). */
   duplicateSource: string | null;
   disposition: Disposition;
+  /** An interpretation Ionic is making that the user can override, stated
+   *  plainly (e.g. "treated as customer sales"). Null when nothing is assumed. */
+  assumption: string | null;
   rowCount: number;
   /** What one row represents, inferred from values. */
   grain: GrainInfo;
