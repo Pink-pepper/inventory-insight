@@ -755,7 +755,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
     }
     const batch = await getImportBatch(supabase, orgId, data.batchId);
     if (!batch) throw new Error("Import not found in this workspace.");
-    if (batch.status === "deleted") return { ok: true, already: true, transactions: 0, purchaseOrders: 0 };
+    if (batch.status === "deleted") return { ok: true, already: true, transactions: 0, purchaseOrders: 0, forecasts: 0, movements: 0 };
     if (batch.status !== "inactive") {
       throw new Error("Deactivate the import before deleting it permanently.");
     }
