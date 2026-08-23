@@ -1,65 +1,81 @@
-# Import Lifecycle & Dataset Deletion Fix
+# Ionic — Intelligent Ingestion & ETL Layer
 
-## Diagnosis — root cause confirmed against the live database
+## What exists today (verified by inspection)
 
-The error `null value in column "org_id" of relation "purchase_orders" violates not-null constraint` is **not** an application insert bug. It is a schema defect:
+One pipeline already has the right bones; the gap is that its understanding is shallow and the UI delegates every decision to the user:
 
-- The tenant-isolation foreign keys added during the security hardening passes are **composite** keys, e.g. `purchase_orders (org_id, product_id) REFERENCES products (org_id, id) ON DELETE SET NULL`.
-- Postgres' `SET NULL` on a composite key nulls **all** referencing columns — including `org_id`, which is `NOT NULL`. So deleting any product, supplier or location that a purchase order references fails with exactly the reported error.
-- Trigger path: the workspace delete in Settings (`clearWorkspaceData`) removes products/suppliers while imported purchase orders still exist. Your Excel demo dataset contained PO lines, so the delete blew up. The same landmine sits on `sales_transactions` (customer/channel/location/batch) and `inventory` (location).
+- `sheet-table.ts` — neutral `SheetTable`, size guard rails. Good, unchanged.
+- `csv-source.ts` / `xlsx-source.ts` — pure, worker-safe parsers → `SheetTable[]`. Unchanged.
+- `mapping.ts` — `FIELD_ALIASES` (header-name synonyms), `ENTITY_DEFINITIONS` (10 kinds with required/optional fields), `suggestSheet()` scores **header names only**; confidence is zero unless every required field is matched. No value analysis, no cross-sheet awareness.
+- `inspect.ts` — per-sheet suggestion → preview DTO.
+- `canonicalise.ts` / `validate.ts` — deterministic validation, date/number/currency parsing, row hashing, issue log. Solid; extended, not replaced.
+- `ionic.functions.ts` — `inspectUpload` / `importUpload` two-step commit with server-side re-validation, batch creation, lifecycle compatibility.
+- `import-wizard.tsx` — renders a full configuration panel **per sheet** (entity select + per-field mapping selects). This is the cognitive-load problem.
 
-Verified via `pg_constraint`: `purchase_orders_org_product_fkey`, `purchase_orders_org_supplier_fkey`, `purchase_orders_org_location_fkey`, `purchase_orders_org_batch_fk` (NO ACTION), `sales_tx_org_customer_fkey`, `sales_tx_org_channel_fkey`, `sales_tx_org_location_fkey`, `sales_tx_org_batch_fkey`, `inventory_org_location_fkey` — all composite with plain `SET NULL`.
+Design rule for everything below: deterministic, rule-based inference only — no AI calls, no new pipeline, no schema changes. The existing modules are extended; the import lifecycle from the previous task is untouched.
 
-Secondary gap: `import_batches` exists (default status `completed`, 3 batches present) with only read/insert policies — there is no lifecycle, no per-import delete, and no UI for it. Only `sales_transactions` and `purchase_orders` carry `import_batch_id`; products, suppliers, customers, channels, locations and inventory are shared, non-batch-attributed entities.
+## 1. Column profiling — `ingestion/profile.ts` (new)
 
-## 1. Migration — fix the FK defect, enable the lifecycle
+Pure functions that profile every column of every sheet before any mapping decision: inferred type mix (date / number / identifier-like text / free text / boolean), null rate, unique-value ratio, and up to N sample values. Value-pattern signals recognise identifiers (`CUS-001` vs `SKU-1001` style prefixes), currency-prefixed numbers, and date formats actually present. This is the "use data, not just headers" input.
 
-- Recreate the nine composite FKs with a column-list action, e.g. `ON DELETE SET NULL (product_id)` — only the business reference is cleared, `org_id` is never touched. This is a **strengthening** of integrity: tenant isolation, RLS and NOT NULL constraints are untouched.
-- `purchase_orders_org_batch_fk` moves from NO ACTION to `SET NULL (import_batch_id)`, matching its single-column twin.
-- `GRANT UPDATE (status) ON public.import_batches TO authenticated` plus an UPDATE policy restricted to owners/admins (`has_org_role`). Status is the only mutable column; there is still **no** delete policy — batches are soft-deleted, preserving the audit trail.
+## 2. Semantic mapping upgrade — extend `mapping.ts`
 
-## 2. Fix `clearWorkspaceData` (immediate bug)
+- Substantially expand `FIELD_ALIASES` (Stock Code, Item No, Client, Account, Buyer, Units, Volume, Closing Balance, etc.).
+- Column→field scoring becomes multi-signal: header alias (exact > normalized > partial), type compatibility from the profile (a `quantity` candidate must be numeric; `transaction_date` must parse as dates), and value-pattern affinity (identifier prefix agreement). Every mapping carries a confidence: **high / medium / low / unresolved**.
 
-Delete in dependency order and cover the whole workspace: recommendations → purchase_orders → sales_transactions → sales → inventory → products → suppliers → customers → channels → locations → data_sources. `import_batches` rows are kept (audit trail); the audit event records the scope. Role gate (owner/admin) unchanged.
+## 3. Sheet classification — `ingestion/classify.ts` (new)
 
-## 3. Import lifecycle — repository layer (`src/lib/data/repository.ts`)
+Classifies each sheet on multiple signals, never the sheet name alone: header-alias scores (existing), column-type signatures (date+quantity+price ⇒ transactional; month-grain date+quantity ⇒ aggregate demand; mostly text, few rows, no measures ⇒ contextual), value patterns, and row/column shape. Each sheet gets:
 
-- `inactiveBatchIds()` — ids of batches with status `inactive`.
-- `loadDemandFacts()` / `loadOpenSupply()` — exclude rows from inactive batches, so deactivated data stops influencing demand, supply, distribution and recommendations. Monthly `sales` rows are handled by recomputation (below), so no filter needed there.
-- `refreshMonthlySales()` — gains an optional excluded-batch filter so recomputation ignores inactive batches.
-- `rebuildMonthlyFromTransactions()` — for the products/months a batch touched: delete those monthly rows, then re-derive them from remaining active transactions. This exactly mirrors existing import semantics (transactions are the source of truth for months they touch).
-- `listImportBatches()` — batches with status, row counts and per-batch transaction/PO counts for the UI.
-- `setImportBatchStatus()` — org-scoped status transition; a foreign batch id is a no-op.
-- `deleteBatchRows()` — removes the batch's transactions and PO lines, returns counts.
+- an entity kind from the **existing** 10 kinds (no new canonical entities),
+- a data role tag: master / transactional / aggregate / contextual,
+- a confidence category,
+- a plain-language reason ("looks like sales transactions: invoice date + customer + item + quantity").
 
-## 4. Server functions (`src/lib/ionic.functions.ts`)
+Contextual sheets (company info, notes, contacts) classify as `ignored` with a stated reason — visible, never silently dropped. Analytical sheets like `Month | SKU | Region | Units Sold` classify as `sales_monthly` (aggregate role) instead of falling through to unknown.
 
-- `getImportBatches` (any member) — list with lifecycle state.
-- `setImportBatchActive` (owner/admin) — deactivate: status → `inactive`, rebuild monthly aggregates for affected products, regenerate recommendations, audit `import.deactivated`. Reactivate: status → `completed`, same recomputation, audit `import.reactivated`. Transaction rows are never physically touched by either.
-- `deleteImportBatch` (owner/admin) — **server-enforced: only `inactive` batches can be deleted.** Deletes the batch's transaction and PO rows, rebuilds monthly aggregates, regenerates recommendations, sets status → `deleted` (soft delete — metadata retained), audits `import.deleted` with counts.
+## 4. Cross-sheet relationships — `ingestion/relationships.ts` (new)
 
-Status model: `completed`/`active` = Active, `inactive` = Inactive, `deleted` = soft-deleted (hidden from UI, retained for audit).
+After per-sheet mapping, value-set overlap analysis links identifier columns across sheets: `Sales."Customer Code" ⊆ Customers."Customer Code"` confirms both the sheet class and the column meaning — this resolves ambiguous columns like a bare "Code". Two uses:
 
-## 5. Data Sources UI (`src/routes/_authenticated/data-sources.tsx`)
+- **Confidence boosting:** a column whose values match a master sheet's key is confirmed as that foreign reference.
+- **Overlap detection:** if a transaction-level sheet and a monthly-aggregate sheet cover the same SKU-months, flag the overlap. Default: import the transaction-level source (day grain is strictly richer and feeds the monthly aggregate), mark the aggregate sheet as *review — overlaps with Sales* and skip it unless the user includes it. No silent double-counting; the choice is surfaced, not hidden.
 
-New "Imported files" panel listing each batch: filename, format, import date, rows accepted/rejected, transaction and PO counts, and a status pill (Active / Inactive). Owners/admins get per-row actions, each with an inline confirm:
+## 5. Auto-import decision — folded into `classify.ts`/`inspect.ts`
 
-- **Deactivate** (active only) — copy explains data is excluded from all planning, not deleted.
-- **Reactivate** (inactive only).
-- **Delete permanently** (inactive only) — copy explains transaction and PO rows are removed, shared entities (products, suppliers, customers, channels, locations) are preserved, and the import record is kept for audit.
+Per sheet: **high** confidence → auto-import (pre-approved plan); **medium** → imported but listed under warnings; **low/unknown** → skipped pending review, with the full override UI. `inspectUpload` returns the workbook-level summary (`12 sheets · 9 ready · 2 warnings · 1 needs review`), per-sheet confidence/role/reasons, relationships found, and overlap flags. `importUpload` is unchanged in contract — it still receives explicit plans and re-validates everything server-side; the wizard simply stops forcing the user to author plans by hand.
 
-Members see the list read-only. All actions invalidate queries so planning views refresh.
+## 6. Normalization hardening — extend `validate.ts`
 
-## 6. Stated limitation (shown in the UI, not hidden)
+- Missing-value tokens (`N/A`, `-`, `unknown`, `n.a.`, blank) parse as *missing*, never zero, for numeric/date fields.
+- Add explicit `23-Aug-26`-style day-first written dates (deterministic, no engine sniffing); existing ISO / `dd/mm/yyyy` / Excel-serial paths unchanged.
+- Currency-prefixed numbers (`₦1,250`, `AED 4,500`) already parse; covered by new tests.
 
-Inventory snapshots (`inventory` rows) and shared master data are **not batch-attributed** — an import upserts them at workspace level, so deactivating or deleting a batch cannot rewind stock-on-hand or remove products/suppliers the file introduced. The delete/deactivate dialogs will say this plainly. Attributing inventory and master data per batch is possible later (add `import_batch_id` to those tables) but is out of scope for this fix.
+## 7. Exception-based UI — rework `import-wizard.tsx`
 
-## Security notes
+Flow becomes: **upload → "We found N sheets" → summary → Import / review exceptions.**
 
-- No change to authentication, RLS posture, or tenant isolation — the migration tightens a defective constraint and adds one owner/admin-scoped update policy.
-- `org_id` is always derived server-side; every mutation is double org-scoped; role checks happen in the server function **and** in RLS.
-- Batches can never be hard-deleted through the API (no delete policy exists).
+- Header summary card: sheets found, ready / warnings / needs review counts, and the business preview (Products 1,240 · Customers 482 · Sales 18,421 transactions · …).
+- **Ready sheets**: collapsed rows — name, detected entity, record count, confidence pill; expandable to override entity or any column mapping (existing controls reused).
+- **Warnings / needs-review sheets**: expanded by default with the reason and the existing mapping controls.
+- One `Import N sheets` button; no per-sheet approval. Overrides always possible (AI-assisted, not AI-locked).
+- Post-import report extended: per-entity record counts, per-sheet disposition (imported / skipped / needs review), warnings grouped, mapping-confidence breakdown.
+
+CSV uses the identical path (one sheet through the same classifier); high-confidence CSVs stay effectively one-click.
+
+## 8. Provenance & lifecycle — no regression
+
+No schema changes: `import_batches.sheet_summary` (jsonb) gains per-sheet `confidence`, `role`, and `disposition` entries — batch-level provenance plus existing transaction/PO `import_batch_id` attribution stays the source of truth. One workbook = one batch; the Imported Files lifecycle (Active → Inactive → Deleted), inactive-batch planning exclusion, monthly recomputation, role checks, RLS, and audit events all keep working. Shared master data remains workspace-level (known, documented limitation — unchanged).
+
+## Files
+
+- **New:** `ingestion/profile.ts`, `ingestion/classify.ts`, `ingestion/relationships.ts`, `ingestion/etl.test.ts` (+ fixtures).
+- **Changed:** `ingestion/mapping.ts` (aliases, confidence, value-aware scoring), `ingestion/validate.ts` (missing tokens, written dates), `ingestion/inspect.ts` (rich inspection DTO), `ionic.functions.ts` (DTO passthrough only), `import-wizard.tsx` (exception UX), `data-sources.tsx` (minor: report display).
+- **Not touched:** parsers, `canonicalise.ts` row rules, repository persistence, lifecycle functions, RLS, routes.
 
 ## Verification
 
-Typecheck, existing unit tests, production build; then a live smoke test in the preview: deactivate a batch (planning numbers change, transactions retained), reactivate (numbers restored), attempt delete on an active batch (refused), delete an inactive batch (rows gone, batch record retained), and re-run the workspace delete that originally failed. Anything not run will be stated as not run.
+- Unit tests: profiling; classification fixtures (a sheet named "Data" with Invoice No / Customer Code / Item Code / Qty / Unit Price must classify as transactions; `Month|SKU|Units` as aggregate demand; "Company Info" as contextual-skip); relationship linking; overlap detection; normalization cases.
+- Regression: build a synthetic 14-sheet workbook matching the structure you described (business info, customers, products, sales, monthly sales, POs, inventory, pricing, locations…) and assert the engine auto-maps the large majority with no manual configuration. **Your real demo workbook is not available in this session — please re-attach it when we verify, and it becomes the primary acceptance test.**
+- End-to-end: upload → summary → import → Imported Files lifecycle (deactivate/reactivate/delete) still works; existing CSV one-click path unchanged; typecheck + full test suite + production build.
+- Report afterwards: files changed, logic added, tests run, known limitations, deferred items — and an explanation of exactly how each sheet/column decision is made.
