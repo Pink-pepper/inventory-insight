@@ -701,6 +701,9 @@ function SheetCard({
                 ? "Recognised, not stored"
                 : "Not included"}
         </Pill>
+        {included ? (
+          <Pill tone="neutral">{capabilityLabel(choice.kind).badge}</Pill>
+        ) : null}
         <span className="text-[11px] text-muted-foreground">
           {ROLE_LABEL[sheet.role]}
           {sheet.timeOrientation !== "not_dated" && sheet.timeOrientation !== "policy"
@@ -738,6 +741,17 @@ function SheetCard({
             <p className="text-[11px] text-muted-foreground">
               Row grain: {sheet.grainKey}
             </p>
+            <p className="text-[11px] text-muted-foreground">
+              {capabilityLabel(included ? choice.kind : sheet.suggestedKind).detail}
+            </p>
+            {sheet.assumption && included && choice.kind === "transactions" ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-status-watch/40 bg-surface-muted px-3 py-2">
+                <p className="text-xs text-status-watch">{sheet.assumption}</p>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onKind("inventory_movement")}>
+                  Reclassify as Inventory movements
+                </Button>
+              </div>
+            ) : null}
             {sheet.fieldReasons.length ? (
               <ul className="space-y-0.5 text-xs text-muted-foreground">
                 {sheet.fieldReasons.map((r) => (
