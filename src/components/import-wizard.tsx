@@ -580,6 +580,24 @@ export function ImportWizard() {
                 : ""}
             </p>
           ) : null}
+          {(outcome.forecasts?.inserted ?? 0) > 0 ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {num(outcome.forecasts!.inserted)} forward demand records stored
+              {outcome.forecasts!.duplicates
+                ? ` · ${num(outcome.forecasts!.duplicates)} already imported previously and skipped`
+                : ""}
+            </p>
+          ) : null}
+          {(outcome.policyApplied?.length ?? 0) > 0 ? (
+            <p className="mt-1.5 text-xs text-status-hold">
+              Planning policy updated: {outcome.policyApplied!.join(", ")}.
+            </p>
+          ) : null}
+          {(outcome.policySkipped?.length ?? 0) > 0 ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Not applied (item-specific or ambiguous): {outcome.policySkipped!.join(", ")}.
+            </p>
+          ) : null}
           {outcome.issues.length ? (
             <div className="mt-4 max-h-72 overflow-y-auto rounded-md border border-border">
               <table className="w-full text-xs">
