@@ -1203,12 +1203,12 @@ export async function updateScenario(
     assumptions?: ScenarioAssumptions;
   },
 ): Promise<ScenarioRecord> {
-  const fields: Record<string, unknown> = {};
-  if (patch.name !== undefined) fields.name = patch.name;
-  if (patch.description !== undefined) fields.description = patch.description;
-  if (patch.status !== undefined) fields.status = patch.status;
-  if (patch.scope !== undefined) fields.scope = patch.scope;
-  if (patch.assumptions !== undefined) fields.assumptions = patch.assumptions;
+  const fields: Database["public"]["Tables"]["scenarios"]["Update"] = {};
+  if (patch.name !== undefined) fields["name"] = patch.name;
+  if (patch.description !== undefined) fields["description"] = patch.description;
+  if (patch.status !== undefined) fields["status"] = patch.status;
+  if (patch.scope !== undefined) fields["scope"] = patch.scope as unknown as Json;
+  if (patch.assumptions !== undefined) fields["assumptions"] = patch.assumptions as unknown as Json;
   const { data, error } = await supabase
     .from("scenarios")
     .update(fields)
