@@ -5,6 +5,16 @@
  * organisation's growth setting, projected across the configured planning
  * horizon. Nothing statistical is inferred and no forecast confidence is
  * claimed: every number here can be recomputed by hand from the inputs.
+ *
+ * SCOPE BOUNDARY (deliberate, do not "fix" ad hoc): this module reads only
+ * observed sales history. Imported forward demand lives in the
+ * `demand_forecasts` domain and is intentionally NOT consumed here yet.
+ * FOLLOW-UP for the planning-engine audit: define how historical demand,
+ * imported forecasts, inventory, supply, planning policies, lead times and
+ * other constraints combine inside planning calculations and
+ * recommendations — including precedence when both a trailing-average
+ * baseline and an imported forecast exist for the same SKU/period. Tracked
+ * in the project follow-up record (Ionic planning-engine audit follow-ups).
  */
 import type { TimeGrain } from "@/lib/domain/time-grain";
 import type { DemandBucket, SeriesCoverage } from "@/lib/demand/series";

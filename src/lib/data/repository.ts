@@ -1349,6 +1349,14 @@ export interface ForecastPersistResult {
  * never read by the trailing-average engine. The fingerprint covers the
  * forecast cell (SKU, period, location); a re-import of the same cell is
  * skipped rather than duplicated.
+ *
+ * Provenance/lifecycle: every row carries its source reference, row
+ * fingerprint, method label and import batch; batch deletion and workspace
+ * clear remove forecast rows (`deleteBatchRows`, `clearWorkspaceData`).
+ *
+ * SCOPE BOUNDARY: forecast CONSUMPTION by the planning/recommendation engine
+ * is a documented follow-up for the planning-engine audit — do not wire this
+ * table into baseline, supply or scenario calculations before that audit.
  */
 export async function persistForecasts(
   supabase: Db,
