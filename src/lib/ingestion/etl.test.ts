@@ -206,7 +206,7 @@ describe("generalised planning-data recognition", () => {
     expect(s.kind).toBe("sales_monthly");
   });
 
-  test("receipts/usage style sheets are recognised as movements and not stored", () => {
+  test("receipts/usage style sheets are recognised as movements and stored as records", () => {
     const analysis = classifyWorkbook([
       sheet("Products", MASTER_HEADERS, MASTER_ROWS),
       sheet("Goods Flow", ["SKU", "Date", "Received", "Issued", "Reason"], [
@@ -217,7 +217,95 @@ describe("generalised planning-data recognition", () => {
     ]);
     const mv = analysis.sheets.find((s) => s.sheetName === "Goods Flow")!;
     expect(mv.kind).toBe("inventory_movement");
-    expect(mv.disposition).toBe("unsupported");
+    expect(["auto", "review"]).toContain(mv.disposition);
+  });
+
+  test("a generic consumption log ('Qty' + 'Type') is classified by value-scan, not headers", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Stock Usage", ["SKU", "Date", "Qty", "Type"], [
+        ["SKU-0001", "2026-08-01", "-5", "consumption"],
+        ["SKU-0002", "2026-08-02", "-2", "damage"],
+        ["SKU-0003", "2026-08-03", "4", "transfer"],
+        ["SKU-0001", "2026-08-04", "-3", "consumption"],
+      ]),
+    ]);
+    const log = analysis.sheets.find((s) => s.sheetName === "Stock Usage")!;
+    expect(log.kind).toBe("inventory_movement");
+    expect(log.disposition).toBe("auto");
+    expect(log.mapping["movement_type"]).toBe(3);
+    expect(log.mapping["movement_qty"]).toBe(2);
+    expect(log.reason).toContain("never enter sales history or demand planning");
+  });
+
+  test("commercial-less transaction sheets carry a reclassifiable assumption", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Despatches", ["SKU", "Despatch Date", "Quantity"], [
+        ["SKU-0001", "2026-08-01", "12"],
+        ["SKU-0002", "2026-08-02", "7"],
+      ]),
+    ]);
+    const tx = analysis.sheets.find((s) => s.sheetName === "Despatches")!;
+    expect(tx.kind).toBe("transactions");
+    expect(tx.assumption).toContain("customer sales");
+  });
+
+  test("transaction sheets with commercial fields carry no assumption", () => {
+    const analysis = classifyWorkbook([
+      sheet("Products", MASTER_HEADERS, MASTER_ROWS),
+      sheet("Data", TX_HEADERS, TX_ROWS),
+    ]);
+    const tx = analysis.sheets.find((s) => s.sheetName === "Data")!;
+    expect(tx.kind).toBe("transactions");
+    expect(tx.assumption).toBeNull();
+  });
+
+  test("capability labels reflect the stored/planning split", () => {
+    expect(capabilityLabel("transactions").badge).toBe("Feeds planning");
+    expect(capabilityLabel("products").badge).toBe("Feeds planning");
+    expect(capabilityLabel("inventory_movement").badge).toBe("Stored as record");
+    expect(capabilityLabel("planning_policy").badge).toBe("Policy proposals only");
+    expect(capabilityLabel("documentation").badge).toBe("Recognised, not stored");
+  });
+
+  test("movement canonicalisation preserves sign, $0 values, and verbatim reasons", () => {
+    const sh = sheet("Usage", ["SKU", "Date", "Qty", "Reason", "Cost"], [
+      ["SKU-0001", "2026-08-01", "-5", "Damaged in warehouse", "0"],
+      ["SKU-0002", "2026-08-02", "10", "some novel reason", "12.50"],
+    ]);
+    const result = canonicalise(
+      [sh],
+      [{
+        sheetName: "Usage",
+        kind: "inventory_movement",
+        mapping: { sku: 0, transaction_date: 1, movement_qty: 2, movement_type: 3, value: 4 },
+      }],
+    );
+    expect(result.dataset.movements).toHaveLength(2);
+    const [dmg, novel] = result.dataset.movements!;
+    expect(dmg!.quantity).toBe(-5);
+    expect(dmg!.value).toBe(0); // $0 preserved, not null
+    expect(dmg!.movementClass).toBe("damage");
+    expect(dmg!.sourceReason).toBe("Damaged in warehouse");
+    expect(dmg!.rowHash.length).toBeGreaterThan(0);
+    expect(novel!.quantity).toBe(10);
+    expect(novel!.value).toBe(12.5);
+    expect(novel!.movementClass).toBe("other");
+    expect(novel!.sourceReason).toBe("some novel reason");
+    expect(result.stats.rowsAccepted).toBe(2);
+  });
+
+  test("movement fingerprints are stable across runs", () => {
+    const plan = [{
+      sheetName: "Usage",
+      kind: "inventory_movement" as const,
+      mapping: { sku: 0, transaction_date: 1, movement_qty: 2, movement_type: 3 },
+    }];
+    const make = () => sheet("Usage", ["SKU", "Date", "Qty", "Reason"], [["SKU-0001", "2026-08-01", "-5", "damage"]]);
+    const a = canonicalise([make()], plan).dataset.movements![0]!.rowHash;
+    const b = canonicalise([make()], plan).dataset.movements![0]!.rowHash;
+    expect(a).toBe(b);
   });
 
   test("parameter sheets surface policy proposals without being imported as data", () => {
