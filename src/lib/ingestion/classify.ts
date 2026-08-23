@@ -499,7 +499,6 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
           },
         );
       }
-      void moveDef;
     }
 
     const runnerUp = candidates.filter((c) => c !== best)[0];
