@@ -502,8 +502,13 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
           const idx = sheet.headers.findIndex((h) => canonicalField(h, ["movement_type"]) === "movement_type");
           return idx >= 0 ? idx : null;
         })();
+      // A generic header ("Type", "Reason") is NOT movement evidence on its
+      // own — sales logs carry those too. It counts only when the header
+      // itself uses movement words or its values do (movementValues below).
+      const typeHeaderIsMovementWord =
+        typeColumn != null && MOVEMENT_WORDS.test(headerKey(sheet.headers[typeColumn] ?? ""));
       const movementVocabulary =
-        typeColumn != null ||
+        typeHeaderIsMovementWord ||
         (movementCand != null &&
           movementCand.matches.some(
             (m) => m.field === "movement_qty" && MOVEMENT_WORDS.test(headerKey(sheet.headers[m.column] ?? "")),
