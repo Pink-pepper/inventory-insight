@@ -8,7 +8,13 @@ import { AppShell, useWorkspace } from "@/components/app-shell";
 import { ImportWizard } from "@/components/import-wizard";
 import { Pill } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { getAuditLog, ingestDataset } from "@/lib/ionic.functions";
+import {
+  deleteImportBatch,
+  getAuditLog,
+  getImportBatches,
+  ingestDataset,
+  setImportBatchActive,
+} from "@/lib/ionic.functions";
 import { num } from "@/lib/format";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 
@@ -69,6 +75,8 @@ function DataSourcesPage() {
     >
       <div className="space-y-4">
         <ImportWizard />
+
+        <ImportedFiles />
 
         <div className="grid gap-3">
           <section className="panel p-5">
@@ -225,5 +233,165 @@ function DataSourcesPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+type BatchLifecycle = "active" | "inactive" | "deleted";
+
+interface BatchRow {
+  id: string;
+  filename: string;
+  source: string;
+  lifecycle: BatchLifecycle;
+  rowsRead: number;
+  rowsAccepted: number;
+  rowsRejected: number;
+  warnings: number;
+  sheets: { sheet: string; kind: string; rows: number }[];
+  createdAt: string;
+  transactions: number;
+  purchaseOrders: number;
+}
+
+/**
+ * Imported-file lifecycle: every upload is listed with what it contributed.
+ * Owners/admins can deactivate an import (excluded from planning, nothing
+ * deleted) and, once inactive, permanently remove its rows. Batch records are
+ * always retained for audit.
+ */
+function ImportedFiles() {
+  const fetchBatches = useServerFn(getImportBatches);
+  const setActive = useServerFn(setImportBatchActive);
+  const removeBatch = useServerFn(deleteImportBatch);
+  const queryClient = useQueryClient();
+  const { data } = useQuery({ queryKey: ["import-batches"], queryFn: () => fetchBatches() });
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  async function toggle(batch: BatchRow, active: boolean) {
+    setBusyId(batch.id);
+    try {
+      await setActive({ data: { batchId: batch.id, active } });
+      await queryClient.invalidateQueries();
+      toast.success(
+        active
+          ? `${batch.filename} reactivated — its rows are back in planning.`
+          : `${batch.filename} deactivated — excluded from planning, nothing deleted.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not change the import state");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(batch: BatchRow) {
+    if (confirmId !== batch.id) {
+      setConfirmId(batch.id);
+      return;
+    }
+    setConfirmId(null);
+    setBusyId(batch.id);
+    try {
+      const res = await removeBatch({ data: { batchId: batch.id } });
+      await queryClient.invalidateQueries();
+      toast.success(
+        `${batch.filename} deleted — ${num(res.transactions ?? 0)} transactions and ${num(res.purchaseOrders ?? 0)} purchase orders removed.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not delete the import");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const batches = data?.batches ?? [];
+  const canManage = data?.canManage ?? false;
+
+  return (
+    <section className="panel">
+      <header className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Imported files</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Each upload stays reversible: deactivate to exclude it from planning, reactivate to bring
+          it back, delete to remove its rows permanently.
+        </p>
+      </header>
+      <div className="divide-y divide-border">
+        {batches.map((b) => (
+          <div key={b.id} className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2.5 text-sm">
+              <span className="font-medium">{b.filename}</span>
+              <Pill tone={b.lifecycle === "active" ? "hold" : "watch"}>
+                {b.lifecycle === "active" ? "Active" : "Inactive"}
+              </Pill>
+              <span className="text-xs uppercase text-muted-foreground">{b.source}</span>
+              <span className="ml-auto text-xs text-muted-foreground tabular">
+                {new Date(b.createdAt).toLocaleDateString()} · {num(b.rowsAccepted)} rows accepted
+                {b.warnings ? ` · ${num(b.warnings)} warnings` : ""}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {b.sheets.length} sheet{b.sheets.length === 1 ? "" : "s"}
+                {b.sheets.length
+                  ? ` (${b.sheets
+                      .filter((s) => s.kind !== "ignored")
+                      .map((s) => s.sheet)
+                      .slice(0, 4)
+                      .join(", ")}${b.sheets.filter((s) => s.kind !== "ignored").length > 4 ? ", …" : ""})`
+                  : ""}
+              </span>
+              {b.transactions > 0 ? <span>{num(b.transactions)} transactions</span> : null}
+              {b.purchaseOrders > 0 ? <span>{num(b.purchaseOrders)} purchase orders</span> : null}
+              {b.lifecycle === "inactive" ? (
+                <span className="text-status-watch">Excluded from planning and recommendations</span>
+              ) : null}
+            </div>
+            {canManage ? (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {b.lifecycle === "active" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={busyId === b.id}
+                    onClick={() => void toggle(b, false)}
+                  >
+                    {busyId === b.id ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                    Deactivate
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={busyId === b.id}
+                      onClick={() => void toggle(b, true)}
+                    >
+                      {busyId === b.id ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                      Reactivate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={confirmId === b.id ? "destructive" : "ghost"}
+                      className="h-7 text-xs"
+                      disabled={busyId === b.id}
+                      onClick={() => void remove(b)}
+                    >
+                      {confirmId === b.id ? "Confirm permanent delete" : "Delete permanently"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {batches.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">No files imported yet.</p>
+        ) : null}
+      </div>
+    </section>
   );
 }

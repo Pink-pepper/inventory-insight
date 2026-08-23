@@ -5,18 +5,23 @@ import { buildDemoDataset } from "@/lib/connectors/demo-dataset";
 import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
+  batchDemandFootprint,
   buildRecommendationView,
   createImportBatch,
   createScenario as createScenarioRecord,
+  deleteBatchRows,
   deleteScenario as deleteScenarioRecord,
   getEffectivePolicy,
+  getImportBatch,
   getLastRun,
   getProfile,
   getScenario as getScenarioRecord,
   getScenarioRun as getScenarioRunRecord,
+  inactiveBatchIds,
   insertScenarioRun as insertScenarioRunRecord,
   listAuditEvents,
   listDataSources,
+  listImportBatches,
   listPurchaseOrders,
   listScenarios as listScenarioRecords,
   loadDemandFacts,
@@ -25,9 +30,11 @@ import {
   persistDataset,
   persistPurchaseOrders,
   persistTransactions,
+  rebuildMonthlyForProducts,
   regenerateRecommendations,
   resolveOrg,
   savePlanningPolicy,
+  setImportBatchStatus,
   updatePurchaseOrderApproval,
   updateScenario as updateScenarioRecord,
 } from "@/lib/data/repository";
@@ -336,10 +343,33 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     if (role !== "owner" && role !== "admin") {
       throw new Error("Only workspace owners and admins can delete data.");
     }
-    for (const table of ["recommendations", "sales", "inventory", "products", "suppliers", "data_sources"] as const) {
+    // Children before parents: fact tables reference products/suppliers/
+    // locations/customers/channels via composite keys and would block or
+    // corrupt the wipe if masters were removed first. Batch records are kept
+    // (audit trail) and soft-retired instead of hard-deleted.
+    const tables = [
+      "recommendations",
+      "purchase_orders",
+      "sales_transactions",
+      "sales",
+      "inventory",
+      "products",
+      "suppliers",
+      "customers",
+      "channels",
+      "locations",
+      "data_sources",
+    ] as const;
+    for (const table of tables) {
       const { error } = await supabase.from(table).delete().eq("org_id", orgId);
       if (error) throw new Error(error.message);
     }
+    const { error: batchError } = await supabase
+      .from("import_batches")
+      .update({ status: "deleted" })
+      .eq("org_id", orgId)
+      .neq("status", "deleted");
+    if (batchError) throw new Error(batchError.message);
     await audit(supabase, orgId, userId, "data.delete", { scope: "workspace" });
     return { ok: true };
   });
@@ -585,6 +615,93 @@ export const importUpload = createServerFn({ method: "POST" })
       evaluated: run.evaluated,
       run,
     };
+  });
+
+/* ------------------------------------------------------------------ *
+ * Import lifecycle: list, deactivate/reactivate, delete
+ * ------------------------------------------------------------------ */
+
+/** Every visible import batch with live row counts and the caller's manage rights. */
+export const getImportBatches = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    const batches = await listImportBatches(supabase, orgId);
+    return { batches, canManage: role === "owner" || role === "admin" };
+  });
+
+/**
+ * Deactivate/reactivate an import. Its transaction and PO rows stay in place
+ * but stop feeding planning; the affected monthly aggregates are rebuilt and
+ * recommendations regenerated so every surface reflects the change at once.
+ */
+export const setImportBatchActive = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ batchId: z.string().uuid(), active: z.boolean() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change import state.");
+    }
+    const batch = await getImportBatch(supabase, orgId, data.batchId);
+    if (!batch) throw new Error("Import not found in this workspace.");
+    if (batch.status === "deleted") {
+      throw new Error("This import has been permanently deleted and can no longer be changed.");
+    }
+    const target = data.active ? "completed" : "inactive";
+    if (batch.status === target) return { ok: true, changed: false };
+
+    await setImportBatchStatus(supabase, orgId, batch.id, target);
+    const footprint = await batchDemandFootprint(supabase, orgId, batch.id);
+    const inactive = await inactiveBatchIds(supabase, orgId);
+    await rebuildMonthlyForProducts(supabase, orgId, footprint.productIds, footprint.months, inactive);
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, data.active ? "import.reactivated" : "import.deactivated", {
+      batch_id: batch.id,
+      filename: batch.filename,
+      products_recomputed: footprint.productIds.length,
+      evaluated: run.evaluated,
+    });
+    return { ok: true, changed: true };
+  });
+
+/**
+ * Permanently remove an import's transaction and PO rows. The batch must be
+ * inactive first (two-step guard); the batch record itself is kept for audit
+ * with status 'deleted' (hard deletes are blocked at the database level).
+ */
+export const deleteImportBatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ batchId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can delete imports.");
+    }
+    const batch = await getImportBatch(supabase, orgId, data.batchId);
+    if (!batch) throw new Error("Import not found in this workspace.");
+    if (batch.status === "deleted") return { ok: true, already: true };
+    if (batch.status !== "inactive") {
+      throw new Error("Deactivate the import before deleting it permanently.");
+    }
+
+    const footprint = await batchDemandFootprint(supabase, orgId, batch.id);
+    const removed = await deleteBatchRows(supabase, orgId, batch.id);
+    const inactive = await inactiveBatchIds(supabase, orgId);
+    await rebuildMonthlyForProducts(supabase, orgId, footprint.productIds, footprint.months, inactive);
+    await setImportBatchStatus(supabase, orgId, batch.id, "deleted");
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, "import.deleted", {
+      batch_id: batch.id,
+      filename: batch.filename,
+      transactions_removed: removed.transactions,
+      purchase_orders_removed: removed.purchaseOrders,
+      evaluated: run.evaluated,
+    });
+    return { ok: true, ...removed };
   });
 
 /**

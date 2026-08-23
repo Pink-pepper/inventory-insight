@@ -516,6 +516,198 @@ export async function createImportBatch(
   return data.id;
 }
 
+// ---------------------------------------------------------------------------
+// Import batch lifecycle (active -> inactive -> deleted)
+// ---------------------------------------------------------------------------
+
+export type ImportLifecycle = "active" | "inactive" | "deleted";
+
+export interface ImportBatchRecord {
+  id: string;
+  filename: string;
+  source: string;
+  status: string;
+  lifecycle: ImportLifecycle;
+  rowsRead: number;
+  rowsAccepted: number;
+  rowsRejected: number;
+  warnings: number;
+  sheets: { sheet: string; kind: string; rows: number; confidence?: string; role?: string }[];
+  createdAt: string;
+  transactions: number;
+  purchaseOrders: number;
+}
+
+export function lifecycleOf(status: string): ImportLifecycle {
+  if (status === "deleted") return "deleted";
+  return status === "inactive" ? "inactive" : "active";
+}
+
+/** Ids of inactive batches — their rows never feed planning facts. */
+export async function inactiveBatchIds(supabase: Db, orgId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("import_batches")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("status", "inactive");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => r.id);
+}
+
+/** All non-deleted batches for the workspace, with row counts, newest first. */
+export async function listImportBatches(supabase: Db, orgId: string): Promise<ImportBatchRecord[]> {
+  const { data, error } = await supabase
+    .from("import_batches")
+    .select(
+      "id, filename, source, status, rows_read, rows_accepted, rows_rejected, warnings, sheet_summary, created_at",
+    )
+    .eq("org_id", orgId)
+    .neq("status", "deleted")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  const batches = data ?? [];
+  return Promise.all(
+    batches.map(async (b) => {
+      const [tx, po] = await Promise.all([
+        supabase
+          .from("sales_transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", orgId)
+          .eq("import_batch_id", b.id),
+        supabase
+          .from("purchase_orders")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", orgId)
+          .eq("import_batch_id", b.id),
+      ]);
+      if (tx.error) throw new Error(tx.error.message);
+      if (po.error) throw new Error(po.error.message);
+      const sheets = Array.isArray(b.sheet_summary)
+        ? (b.sheet_summary as { sheet: string; kind: string; rows: number; confidence?: string; role?: string }[])
+        : [];
+      return {
+        id: b.id,
+        filename: b.filename,
+        source: b.source,
+        status: b.status,
+        lifecycle: lifecycleOf(b.status),
+        rowsRead: b.rows_read,
+        rowsAccepted: b.rows_accepted,
+        rowsRejected: b.rows_rejected,
+        warnings: b.warnings,
+        sheets,
+        createdAt: b.created_at,
+        transactions: tx.count ?? 0,
+        purchaseOrders: po.count ?? 0,
+      } satisfies ImportBatchRecord;
+    }),
+  );
+}
+
+export interface ImportBatchMeta {
+  id: string;
+  filename: string;
+  source: string;
+  status: string;
+}
+
+export async function getImportBatch(
+  supabase: Db,
+  orgId: string,
+  batchId: string,
+): Promise<ImportBatchMeta | null> {
+  const { data, error } = await supabase
+    .from("import_batches")
+    .select("id, filename, source, status")
+    .eq("org_id", orgId)
+    .eq("id", batchId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** Transition a batch status. Returns true when a row was actually updated. */
+export async function setImportBatchStatus(
+  supabase: Db,
+  orgId: string,
+  batchId: string,
+  status: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("import_batches")
+    .update({ status })
+    .eq("org_id", orgId)
+    .eq("id", batchId)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
+/** Distinct products and months a batch's transactions touched — the aggregate
+ *  cells that must be rebuilt when the batch is (de)activated or deleted. */
+export async function batchDemandFootprint(
+  supabase: Db,
+  orgId: string,
+  batchId: string,
+): Promise<{ productIds: string[]; months: string[] }> {
+  const { data, error } = await supabase
+    .from("sales_transactions")
+    .select("product_id, occurred_on")
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId);
+  if (error) throw new Error(error.message);
+  const productIds = new Set<string>();
+  const months = new Set<string>();
+  for (const row of data ?? []) {
+    productIds.add(row.product_id);
+    months.add(monthKey(row.occurred_on));
+  }
+  return { productIds: [...productIds], months: [...months] };
+}
+
+/** Rebuild the monthly demand grain for specific products/months only. Rows
+ *  derived from inactive batches are never written back. */
+export async function rebuildMonthlyForProducts(
+  supabase: Db,
+  orgId: string,
+  productIds: string[],
+  months: string[],
+  excludeBatchIds: string[],
+): Promise<number> {
+  if (productIds.length === 0) return 0;
+  for (const part of chunk(productIds, 100)) {
+    let query = supabase.from("sales").delete().eq("org_id", orgId).in("product_id", part);
+    if (months.length > 0) query = query.in("period_month", months);
+    const { error } = await query;
+    if (error) throw new Error(error.message);
+  }
+  return refreshMonthlySales(supabase, orgId, productIds, excludeBatchIds);
+}
+
+/** Permanently remove a batch's fact rows. Master data (products, suppliers,
+ *  customers, channels, locations) is shared and is never removed here. */
+export async function deleteBatchRows(
+  supabase: Db,
+  orgId: string,
+  batchId: string,
+): Promise<{ transactions: number; purchaseOrders: number }> {
+  const tx = await supabase
+    .from("sales_transactions")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId)
+    .select("id");
+  if (tx.error) throw new Error(tx.error.message);
+  const po = await supabase
+    .from("purchase_orders")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId)
+    .select("id");
+  if (po.error) throw new Error(po.error.message);
+  return { transactions: (tx.data ?? []).length, purchaseOrders: (po.data ?? []).length };
+}
+
 type CustomerRow = Database["public"]["Tables"]["customers"]["Insert"];
 type ChannelRow = Database["public"]["Tables"]["channels"]["Insert"];
 type TransactionRow = Database["public"]["Tables"]["sales_transactions"]["Insert"];
@@ -645,7 +837,13 @@ export async function persistTransactions(
     if (error) throw new Error(error.message);
   }
 
-  const monthsRefreshed = await refreshMonthlySales(supabase, orgId, [...affected]);
+  // Inactive imports never contribute to the monthly grain the engine reads.
+  const monthsRefreshed = await refreshMonthlySales(
+    supabase,
+    orgId,
+    [...affected],
+    await inactiveBatchIds(supabase, orgId),
+  );
   return { inserted: rows.length, duplicates, unknownSkus: [...unknown].slice(0, 25), monthsRefreshed };
 }
 
@@ -658,16 +856,21 @@ export async function refreshMonthlySales(
   supabase: Db,
   orgId: string,
   productIds: string[],
+  excludeBatchIds: string[] = [],
 ): Promise<number> {
   if (productIds.length === 0) return 0;
   const totals = new Map<string, { productId: string; month: string; quantity: number; revenue: number; cogs: number | null }>();
 
   for (const part of chunk(productIds, 100)) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("sales_transactions")
       .select("product_id, occurred_on, quantity, value, unit_price, cogs")
       .eq("org_id", orgId)
       .in("product_id", part);
+    if (excludeBatchIds.length > 0) {
+      query = query.not("import_batch_id", "in", `(${excludeBatchIds.join(",")})`);
+    }
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
     for (const row of data ?? []) {
       const month = `${row.occurred_on.slice(0, 7)}-01`;
@@ -704,6 +907,16 @@ export async function refreshMonthlySales(
  * Monthly rows are never split into days to satisfy a finer grain.
  */
 export async function loadDemandFacts(supabase: Db, orgId: string): Promise<DemandFact[]> {
+  const inactive = await inactiveBatchIds(supabase, orgId);
+  let txQuery = supabase
+    .from("sales_transactions")
+    .select(
+      "product_id, occurred_on, quantity, value, cogs, region, state_province, customers(external_ref, name), channels(code, name), locations(code, name, country, region, state_province)",
+    )
+    .eq("org_id", orgId);
+  if (inactive.length > 0) {
+    txQuery = txQuery.not("import_batch_id", "in", `(${inactive.join(",")})`);
+  }
   const [{ data: products, error: pErr }, { data: monthly, error: mErr }, { data: txns, error: tErr }] =
     await Promise.all([
       supabase
@@ -714,12 +927,7 @@ export async function loadDemandFacts(supabase: Db, orgId: string): Promise<Dema
         .from("sales")
         .select("product_id, period_month, quantity, revenue, cogs")
         .eq("org_id", orgId),
-      supabase
-        .from("sales_transactions")
-        .select(
-          "product_id, occurred_on, quantity, value, cogs, region, state_province, customers(external_ref, name), channels(code, name), locations(code, name, country, region, state_province)",
-        )
-        .eq("org_id", orgId),
+      txQuery,
     ]);
   if (pErr) throw new Error(pErr.message);
   if (mErr) throw new Error(mErr.message);
@@ -820,11 +1028,16 @@ export interface OpenSupplyLine {
  * cancelled orders are history, not supply, and are never returned here.
  */
 export async function loadOpenSupply(supabase: Db, orgId: string): Promise<OpenSupplyLine[]> {
-  const { data, error } = await supabase
+  const inactive = await inactiveBatchIds(supabase, orgId);
+  let query = supabase
     .from("purchase_orders")
     .select("id, product_id, quantity, received_quantity, expected_at, ordered_at, products(sku, name), suppliers(name), locations(code)")
     .eq("org_id", orgId)
     .eq("status", "placed");
+  if (inactive.length > 0) {
+    query = query.not("import_batch_id", "in", `(${inactive.join(",")})`);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? [])
     .map((row) => {
