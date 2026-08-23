@@ -618,3 +618,157 @@ export const setPurchaseOrderApproval = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+// ---------------------------------------------------------------------------
+// Scenario Planning
+// ---------------------------------------------------------------------------
+
+const scenarioPayloadSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).nullable().optional(),
+  status: z.enum(["draft", "active", "archived"]).optional(),
+  scope: planningFilterSchema.optional(),
+  assumptions: scenarioAssumptionsSchema,
+});
+
+/** All scenarios for the workspace, each with its latest run marker. */
+export const listScenarios = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    return { scenarios: await listScenarioRecords(supabase, orgId) };
+  });
+
+/** One scenario plus its run history. */
+export const getScenario = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    return getScenarioRecord(supabase, orgId, data.scenarioId);
+  });
+
+/** Creates a scenario. Any workspace member may define one. */
+export const createScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(scenarioPayloadSchema.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    if (!hasAssumptions(data.assumptions)) {
+      throw new Error("A scenario needs at least one assumption to be worth running.");
+    }
+    const scenario = await createScenarioRecord(supabase, orgId, userId, {
+      name: data.name,
+      description: data.description ?? null,
+      scope: data.scope ?? {},
+      assumptions: data.assumptions,
+    });
+    await audit(supabase, orgId, userId, "scenario.created", {
+      scenario_id: scenario.id,
+      name: scenario.name,
+    });
+    return { scenario };
+  });
+
+/** Updates a scenario's definition. Runs already recorded stay untouched. */
+export const updateScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({ scenarioId: z.string().uuid(), patch: scenarioPayloadSchema.partial() }).parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    if (data.patch.assumptions && !hasAssumptions(data.patch.assumptions)) {
+      throw new Error("A scenario needs at least one assumption to be worth running.");
+    }
+    const scenario = await updateScenarioRecord(supabase, orgId, data.scenarioId, {
+      ...(data.patch.name !== undefined ? { name: data.patch.name } : {}),
+      ...(data.patch.description !== undefined
+        ? { description: data.patch.description ?? null }
+        : {}),
+      ...(data.patch.status !== undefined ? { status: data.patch.status } : {}),
+      ...(data.patch.scope !== undefined ? { scope: data.patch.scope } : {}),
+      ...(data.patch.assumptions !== undefined ? { assumptions: data.patch.assumptions } : {}),
+    });
+    await audit(supabase, orgId, userId, "scenario.updated", { scenario_id: scenario.id });
+    return { scenario };
+  });
+
+/** Deletes a scenario and its run history. Owner/admin only (enforced by RLS). */
+export const deleteScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    await deleteScenarioRecord(supabase, orgId, data.scenarioId);
+    await audit(supabase, orgId, userId, "scenario.deleted", { scenario_id: data.scenarioId });
+    return { ok: true };
+  });
+
+/**
+ * Executes a scenario against the current data and records the run.
+ *
+ * The planning chain runs twice over the same loaded facts — baseline with
+ * the live policy and recorded inputs, scenario with the stored assumptions —
+ * and only the comparison snapshot is persisted, into scenario_runs. No
+ * canonical or recommendation row is ever touched.
+ */
+export const runScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const { scenario } = await getScenarioRecord(supabase, orgId, data.scenarioId);
+    if (!hasAssumptions(scenario.assumptions)) {
+      throw new Error("Add at least one assumption before running this scenario.");
+    }
+    const [facts, policy, signals, openSupply, lastRun] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      loadSignals(supabase, orgId),
+      loadOpenSupply(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    const result = executeScenario({
+      facts,
+      signals,
+      openSupply,
+      policy,
+      filter: scenario.scope,
+      assumptions: scenario.assumptions,
+    });
+    const run = await insertScenarioRunRecord(supabase, orgId, userId, scenario.id, {
+      assumptions: scenario.assumptions,
+      scope: scenario.scope,
+      result,
+      inputProvenance: {
+        factCount: facts.length,
+        skuCount: signals.length,
+        openPoCount: openSupply.length,
+        lastRecommendationRunAt: lastRun?.generatedAt ?? null,
+        executedAt: new Date().toISOString(),
+      },
+    });
+    await audit(supabase, orgId, userId, "scenario.run", {
+      scenario_id: scenario.id,
+      run_id: run.id,
+      version: run.version,
+    });
+    return { runId: run.id, version: run.version };
+  });
+
+/** The full immutable snapshot of one recorded run. */
+export const getScenarioRun = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ runId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    return { run: await getScenarioRunRecord(supabase, orgId, data.runId) };
+  });
