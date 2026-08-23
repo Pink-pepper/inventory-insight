@@ -2,6 +2,7 @@ import type {
   CanonicalChannel,
   CanonicalCustomer,
   CanonicalDataset,
+  CanonicalForecast,
   CanonicalInventory,
   CanonicalProduct,
   CanonicalPurchaseOrder,
@@ -40,6 +41,7 @@ const emptyDataset = (): Required<CanonicalDataset> => ({
   channels: [],
   transactions: [],
   purchaseOrders: [],
+  forecasts: [],
 });
 
 function supplierCodeFrom(code: string, name: string): string {
@@ -78,6 +80,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   const channels = new Map<string, CanonicalChannel>();
   const transactions: CanonicalTransaction[] = [];
   const purchaseOrders: CanonicalPurchaseOrder[] = [];
+  const forecasts = new Map<string, CanonicalForecast>();
   const referenced = new Set<string>();
   const today = new Date().toISOString().slice(0, 10);
 

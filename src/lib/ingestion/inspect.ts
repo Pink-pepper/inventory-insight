@@ -8,7 +8,7 @@ import {
   type Disposition,
   type MappingConfidence,
 } from "./classify";
-import type { Grain, GrainInfo, TimeOrientation } from "./grain";
+import type { Grain, TimeOrientation } from "./grain";
 import { extractPolicyProposals, type PolicyProposal } from "./policy-detect";
 
 export type UploadFormat = "csv" | "xlsx";
@@ -78,7 +78,6 @@ export function toSheets(format: UploadFormat, payload: { text?: string; bytes?:
 export function inspectSheets(filename: string, format: UploadFormat, sheets: SheetTable[]): UploadInspection {
   const bounded = sheets.slice(0, LIMITS.maxSheets);
   const analysis = classifyWorkbook(bounded);
-  const grainBrief = (g: GrainInfo) => ({ grain: g.grain, key: g.key });
   return {
     format,
     filename,
@@ -99,7 +98,7 @@ export function inspectSheets(filename: string, format: UploadFormat, sheets: Sh
       relationships: c.relationships,
       missingRequired: c.missingRequired,
       duplicateSource: c.duplicateSource,
-      grain: grainBrief(c.grain).grain,
+      grain: c.grain.grain,
       grainKey: c.grain.key,
       timeOrientation: c.timeOrientation,
     })),
