@@ -29,6 +29,7 @@ import {
   loadSignals,
   persistDataset,
   persistForecasts,
+  persistMovements,
   persistPurchaseOrders,
   persistTransactions,
   rebuildMonthlyForProducts,
@@ -556,7 +557,7 @@ export const importUpload = createServerFn({ method: "POST" })
     const sheets = toSheets(format, payload);
 
     const plans: SheetPlan[] = data.plans.filter((p) => sheets.some((s) => s.sheetName === p.sheetName));
-    if (plans.every((p) => p.kind === "ignored" || p.kind === "planning_policy" || p.kind === "documentation" || p.kind === "inventory_movement")) {
+    if (plans.every((p) => p.kind === "ignored" || p.kind === "planning_policy" || p.kind === "documentation")) {
       throw new Error("No sheets were selected for import.");
     }
 
@@ -567,7 +568,8 @@ export const importUpload = createServerFn({ method: "POST" })
       result.dataset.sales.length === 0 &&
       (result.dataset.transactions?.length ?? 0) === 0 &&
       (result.dataset.purchaseOrders?.length ?? 0) === 0 &&
-      (result.dataset.forecasts?.length ?? 0) === 0
+      (result.dataset.forecasts?.length ?? 0) === 0 &&
+      (result.dataset.movements?.length ?? 0) === 0
     ) {
       throw new Error(
         result.issues.find((i) => i.severity === "error")?.message ??
@@ -589,10 +591,11 @@ export const importUpload = createServerFn({ method: "POST" })
       warnings: result.stats.warnings,
     });
 
-    const counts = await persistDataset(supabase, orgId, result.dataset);
+    const counts = await persistDataset(supabase, orgId, result.dataset, batchId);
     const tx = await persistTransactions(supabase, orgId, result.dataset, batchId);
     const pos = await persistPurchaseOrders(supabase, orgId, result.dataset.purchaseOrders, batchId);
     const fc = await persistForecasts(supabase, orgId, result.dataset.forecasts, batchId);
+    const mv = await persistMovements(supabase, orgId, result.dataset.movements, batchId);
 
     // Accepted policy proposals: the client sends (sheet, field) pairs only;
     // the values are re-derived from the file itself before anything is
