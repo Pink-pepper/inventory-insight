@@ -139,6 +139,34 @@ export interface CanonicalForecast {
   rowHash: string;
 }
 
+/**
+ * A single non-sales stock movement at day grain (consumption, sampling,
+ * damage, return, adjustment, transfer…). The class is derived from the
+ * verbatim source reason, which is always kept; direction comes from the
+ * signed quantity, never from a user-supplied sign convention. A value of 0
+ * is valid and distinct from null (value not supplied).
+ *
+ * Stored as a record only — no planning engine consumes movements yet; the
+ * per-class semantics live in `@/lib/domain/movement`.
+ */
+export interface CanonicalMovement {
+  sku: string;
+  occurredOn: string; // ISO date
+  /** Signed: negative = stock leaving, positive = stock arriving. */
+  quantity: number;
+  movementClass: MovementClass;
+  /** Verbatim reason/type from the source system, never normalised away. */
+  sourceReason?: string | null;
+  location?: string | null;
+  sourceRef?: string | null;
+  value?: number | null;
+  currencyCode?: string | null;
+  originalAmount?: number | null;
+  cogs?: number | null;
+  /** Deterministic fingerprint of the business fields, for re-import detection. */
+  rowHash: string;
+}
+
 /** A complete ingestion payload produced by any connector. */
 export interface CanonicalDataset {
   suppliers: CanonicalSupplier[];
@@ -150,6 +178,7 @@ export interface CanonicalDataset {
   transactions?: CanonicalTransaction[];
   purchaseOrders?: CanonicalPurchaseOrder[];
   forecasts?: CanonicalForecast[];
+  movements?: CanonicalMovement[];
 }
 
 /** A stock position at a single physical location. */
