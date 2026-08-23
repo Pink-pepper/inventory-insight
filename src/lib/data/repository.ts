@@ -699,7 +699,7 @@ export async function deleteBatchRows(
   supabase: Db,
   orgId: string,
   batchId: string,
-): Promise<{ transactions: number; purchaseOrders: number; forecasts: number }> {
+): Promise<{ transactions: number; purchaseOrders: number; forecasts: number; movements: number }> {
   const tx = await supabase
     .from("sales_transactions")
     .delete()
@@ -721,10 +721,18 @@ export async function deleteBatchRows(
     .eq("import_batch_id", batchId)
     .select("id");
   if (fc.error) throw new Error(fc.error.message);
+  const mv = await supabase
+    .from("inventory_movements")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId)
+    .select("id");
+  if (mv.error) throw new Error(mv.error.message);
   return {
     transactions: (tx.data ?? []).length,
     purchaseOrders: (po.data ?? []).length,
     forecasts: (fc.data ?? []).length,
+    movements: (mv.data ?? []).length,
   };
 }
 
