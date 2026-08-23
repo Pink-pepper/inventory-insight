@@ -210,6 +210,11 @@ describe("executeScenario", () => {
   });
 
   test("an ETA delay can move a stockout earlier than the first receipt", () => {
+    // 90-day horizon → 3 projected months (2026-01..03). On hand 150 with
+    // 100/month demand stockouts in period 2 unless the 2026-02-01 receipt
+    // lands. Delaying that receipt by 60 days pushes it past the horizon.
+    const horizonPolicy: PlanningPolicy = { ...policy, planningHorizonDays: 90 };
+    const shortSignals = [signal({ sku: "A", onHand: 150, monthlySales: yearOfSales("A") })];
     const supply: OpenSupplyLine[] = [
       {
         poId: "po1",
@@ -225,15 +230,16 @@ describe("executeScenario", () => {
         locationCode: null,
       },
     ];
+    const base = executeScenario({
+      facts, signals: shortSignals, openSupply: supply, policy: horizonPolicy, filter: {}, assumptions: {},
+    });
     const delayed = executeScenario({
-      facts,
-      signals,
-      openSupply: supply,
-      policy,
-      filter: {},
+      facts, signals: shortSignals, openSupply: supply, policy: horizonPolicy, filter: {},
       assumptions: { etaDelayDays: 60 },
     });
+    const rowBase = base.rows.find((r) => r.sku === "A")!;
     const row = delayed.rows.find((r) => r.sku === "A")!;
+    expect(rowBase.scenario.riskFlags).not.toContain("stockout_before_receipt");
     expect(row.scenario.riskFlags).toContain("stockout_before_receipt");
     expect(row.gainedRisks).toContain("stockout_before_receipt");
   });
