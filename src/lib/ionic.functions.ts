@@ -352,6 +352,7 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     const tables = [
       "recommendations",
       "demand_forecasts",
+      "inventory_movements",
       "purchase_orders",
       "sales_transactions",
       "sales",
@@ -662,6 +663,8 @@ export const importUpload = createServerFn({ method: "POST" })
       po_unknown_locations: pos.unknownLocations.length,
       forecasts: fc.inserted,
       forecast_duplicates: fc.duplicates,
+      movements: mv.inserted,
+      movement_duplicates: mv.duplicates,
       policy_applied: policyApplied.join(", "),
     });
     await audit(supabase, orgId, userId, "recommendations.generated", {
@@ -676,6 +679,7 @@ export const importUpload = createServerFn({ method: "POST" })
       transactions: tx,
       purchaseOrders: pos,
       forecasts: fc,
+      movements: mv,
       policyApplied,
       policySkipped,
       issues: result.issues,
@@ -768,6 +772,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
       transactions_removed: removed.transactions,
       purchase_orders_removed: removed.purchaseOrders,
       forecasts_removed: removed.forecasts,
+      movements_removed: removed.movements,
       evaluated: run.evaluated,
     });
     return { ok: true, already: false, ...removed };
