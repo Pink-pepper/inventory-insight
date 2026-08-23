@@ -2,6 +2,7 @@ import {
   ENTITY_DEFINITIONS,
   FIELD_ALIASES,
   definitionFor,
+  headerKey,
   type ColumnMapping,
   type EntityDefinition,
   type EntityKind,
