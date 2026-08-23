@@ -167,6 +167,7 @@ export function ImportWizard() {
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [choices, setChoices] = useState<Record<string, SheetChoice>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [policyDecisions, setPolicyDecisions] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<"inspect" | "import" | null>(null);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
 
@@ -176,6 +177,7 @@ export function ImportWizard() {
     setInspection(null);
     setChoices({});
     setExpanded({});
+    setPolicyDecisions({});
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -213,6 +215,16 @@ export function ImportWizard() {
       // Auto-approved sheets stay collapsed; review/blocked open for inspection.
       setExpanded(
         Object.fromEntries(result.sheets.map((s) => [s.sheetName, s.disposition !== "auto"])),
+      );
+      // Policy proposals: clear organisation-wide values start accepted;
+      // anything ambiguous or item-specific starts as "keep existing".
+      setPolicyDecisions(
+        Object.fromEntries(
+          (result.policyProposals ?? []).map((p) => [
+            `${p.sheet}|${p.field}`,
+            p.status === "ready" && p.scope === "organisation",
+          ]),
+        ),
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "The file could not be read.");
@@ -289,6 +301,11 @@ export function ImportWizard() {
             sheetName: s.sheetName,
             kind: choices[s.sheetName]?.kind ?? "ignored",
             mapping: choices[s.sheetName]?.mapping ?? {},
+          })),
+          policyDecisions: (inspection.policyProposals ?? []).map((p) => ({
+            sheet: p.sheet,
+            field: p.field,
+            accepted: policyDecisions[`${p.sheet}|${p.field}`] ?? false,
           })),
         },
       })) as unknown as ImportOutcome;
