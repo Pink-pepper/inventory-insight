@@ -29,10 +29,22 @@ export function safeText(value: string | undefined, fallback = ""): string {
   return (cleaned === "" ? fallback : cleaned).slice(0, LIMITS.maxText);
 }
 
+/**
+ * Spreadsheet conventions for "no value". Treated as absent rather than
+ * malformed so an "N/A" cell does not reject an otherwise valid row.
+ */
+export const MISSING_TOKENS = new Set(["n/a", "na", "-", "--", "—", "unknown", "none", "null", "nil", "#n/a"]);
+
+export function isMissingToken(value: string | undefined): boolean {
+  if (value == null) return true;
+  return MISSING_TOKENS.has(value.trim().toLowerCase());
+}
+
 /** Parses a numeric cell, distinguishing "absent" from "not a number". */
 export function parseNumber(value: string | undefined): { value: number | null; malformed: boolean } {
   if (value == null || value.trim() === "") return { value: null, malformed: false };
   const raw = value.trim();
+  if (MISSING_TOKENS.has(raw.toLowerCase())) return { value: null, malformed: false };
   // Accounting negatives: (1,234.00) means -1234
   const negated = /^\((.*)\)$/.exec(raw);
   const body = (negated ? negated[1]! : raw).replace(/[^0-9eE+\-.]/g, "");
