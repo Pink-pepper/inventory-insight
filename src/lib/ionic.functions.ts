@@ -7,14 +7,21 @@ import {
   audit,
   buildRecommendationView,
   createImportBatch,
+  createScenario as createScenarioRecord,
+  deleteScenario as deleteScenarioRecord,
   getEffectivePolicy,
   getLastRun,
   getProfile,
+  getScenario as getScenarioRecord,
+  getScenarioRun as getScenarioRunRecord,
+  insertScenarioRun as insertScenarioRunRecord,
   listAuditEvents,
   listDataSources,
   listPurchaseOrders,
+  listScenarios as listScenarioRecords,
   loadDemandFacts,
   loadOpenSupply,
+  loadSignals,
   persistDataset,
   persistPurchaseOrders,
   persistTransactions,
@@ -22,7 +29,10 @@ import {
   resolveOrg,
   savePlanningPolicy,
   updatePurchaseOrderApproval,
+  updateScenario as updateScenarioRecord,
 } from "@/lib/data/repository";
+import { hasAssumptions, scenarioAssumptionsSchema } from "@/lib/scenario/assumptions";
+import { executeScenario } from "@/lib/scenario/run";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 import { canonicalise, type SheetPlan } from "@/lib/ingestion/canonicalise";
 import { formatOf, inspectSheets, toSheets } from "@/lib/ingestion/inspect";
