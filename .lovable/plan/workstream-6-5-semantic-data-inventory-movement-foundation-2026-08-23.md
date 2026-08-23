@@ -7,6 +7,7 @@ Architecture and discovery proposal only. No code, migrations, or behavioural ch
 The Package 2 pipeline is sound and worth preserving: source adapter → neutral `SheetTable` → value-based column profiling → grain/orientation inference → multi-signal classification → validation → canonicalisation → tenant-scoped persistence with provenance. Nothing downstream knows about CSV/Excel.
 
 Already working well:
+
 - **Structure-driven classification** — sheet and file names are never used; columns are typed by value shape, then scored against alias tables with arbitration passes for ambiguity and duplicates.
 - **Five-stage lifecycle exists informally** — `auto / review / blocked / unsupported / ignored` dispositions map closely onto Unknown → Recognised → (Stored) → Canonicalised → Planning-enabled, but only the first four stages are explicit; "planning-enabled" is implicit and undocumented per dataset.
 - **Provenance on day-grain facts** — `sales_transactions`, `purchase_orders`, `demand_forecasts` carry `source_row_hash` + `import_batch_id` + `source_ref`; batch lifecycle (active/inactive/deleted) with aggregate rebuild works.
@@ -36,6 +37,7 @@ inventory_movements
 ```
 
 Design rules:
+
 - **Movement semantics are declarative, not hard-coded.** A small in-code registry maps each `movement_class` to capability flags: `{ affectsInventory, countsAsDemand, countsAsRevenue, countsAsCogs }`. Sampling = inventory↓, demand no, revenue no. Sale = all four. Consumption = inventory↓, demand *configurable later*. Engines read these flags only when a future package wires them in — storing movements changes nothing in Packages 1–6.
 - **A $0 value is valid** and distinct from NULL (value not supplied). Validation keeps that distinction; aggregation code must treat NULL as "unknown" and 0 as "genuinely zero".
 - **Direction derives from signed quantity + class**, never from a user-supplied sign convention.
@@ -57,6 +59,62 @@ preserved_datasets
 
   This preserves information with full provenance, is never read by any engine, and gives future packages real customer data to design against. It is deliberately not queryable as facts — it is a vault, not a schema.
 
+## Multi-file and multi-source principle
+
+Ionic must treat uploaded files as sources of business data, not as isolated datasets.
+
+The architecture must remain capable of resolving relationships between multiple files uploaded over time, including:
+
+- the same logical dataset uploaded as a newer full extract;
+
+- incremental files containing only new records;
+
+- overlapping files containing some previously imported periods;
+
+- corrected/revised extracts;
+
+- complementary files representing different domains;
+
+- different source systems representing the same domain.
+
+For example:
+
+Sales_Jan-Jun.xlsx
+
+followed by
+
+Sales_Jan-Aug.xlsx
+
+must eventually be distinguishable from:
+
+Sales_Jul-Aug.xlsx
+
+and from:
+
+Shopify_Sales.xlsx + ERP_Sales.xlsx
+
+Do NOT implement dataset/version resolution in 6.5a or 6.5b.
+
+However, preserve sufficient provenance and source identity information so a later dataset-resolution layer can determine:
+
+- logical dataset/domain;
+
+- source system;
+
+- coverage period;
+
+- grain;
+
+- overlap;
+
+- version;
+
+- whether data is incremental, replacement, correction or complementary;
+
+- source authority.
+
+Import batch identity alone should not be assumed to represent logical dataset identity.
+
 ## 5. Ingestion UX recommendations
 
 Keep the current review structure; change the communication layer:
@@ -64,7 +122,7 @@ Keep the current review structure; change the communication layer:
 1. Per-sheet capability badge driven by the `capability` descriptor: **"Feeds planning"** / **"Stored as record"** / **"Recognised — preserved, not used yet"** / **"Not understood — needs your confirmation"**. This replaces today's implicit "Recognised, not stored" with an explicit statement of consequence.
 2. Assumption surfacing: when a SKU/date/qty sheet is accepted as sales without commercial evidence, show "Ionic is treating these as customer sales" with a one-click reclassify to movement. This is the exception-escalation point for the §2.1 risk.
 3. Within-import overwrite (§2.5) becomes a visible warning, not silent.
-4. No change to the manual-mapping fallback — it stays as the escalation path, but relationship-completed mappings and high-confidence sheets remain auto. The user never sees canonical field names unless they open the override.
+4. No change to the manual-mapping fallback — it stays as the escalation path, but relationship-completed mappings and high-confidence sheets remain auto. The user never sees canonical field names unless they open the override. The system should expose business meaning and intended treatment rather than requiring users to understand Ionic's internal schema.
 
 ## 6. Planning-engine audit — incorrect / ambiguous / incomplete dependencies
 
@@ -73,8 +131,8 @@ Verified findings (do not fix in this workstream; feed the upcoming planning-eng
 1. **Sales is the only demand signal everywhere** — inventory engine (`averageMonthlyDemand` from monthly `sales`), demand baseline (trailing average), supply plan (re-derives the same baseline), distribution (transaction-level rates). There is no consumption concept distinct from sales.
 2. **Zero-value rows distort both sides** — a $0 sample/return row contributes full quantity to demand and a real 0 to revenue totals, diluting implied average price. No module flags or excludes zero-value rows.
 3. **Inventory is snapshot-only** — upsert overwrites `on_hand` per (product, location); no ledger exists, so no reconciliation of balance changes against sales, receipts, or adjustments is possible.
-4. **Dual write-path into `sales`** — direct monthly upload and transaction-rebuilt aggregates are indistinguishable downstream (structurally safe today via richer-wins + rebuild, but unlabelled).
-5. **`demand_forecasts` written, never read** — confirmed; `demand/baseline.ts` header documents this as the tracked follow-up. Precedence vs trailing-average baseline is undefined by current code.
+4. **Dual write-path into `sales**` — direct monthly upload and transaction-rebuilt aggregates are indistinguishable downstream (structurally safe today via richer-wins + rebuild, but unlabelled).
+5. `**demand_forecasts` written, never read** — confirmed; `demand/baseline.ts` header documents this as the tracked follow-up. Precedence vs trailing-average baseline is undefined by current code.
 6. **No COGS or margin is computed anywhere** — `analytics/summary.ts` uses engine output only (inventory value, excess value, purchase requirement); revenue appears once as a display-only demand-workspace total. Defensible today: units-based demand, inventory value at cost, purchase requirement, procurement spend from POs. **Not defensible yet**: gross margin, revenue analytics, plan-vs-actual financials, multi-currency anything (currency stored verbatim, no reporting currency, no conversion).
 7. **Distribution demand is transactions-only** — monthly-only tenants get no location-level distribution insight (documented, correct, but a capability gap to communicate).
 
@@ -96,18 +154,33 @@ Authority order per domain, to be codified as documented precedence rules (most 
 - **Purchase orders**: business-identity fingerprint (PO ref + SKU + supplier) is the identity; mutable fields update in place.
 - **Forecasts**: SKU + period + location + method fingerprint; a customer-supplied forecast and a future Ionic-generated forecast are distinct methods, never merged.
 - Every stored row traces to a batch; every batch to a file, sheet map, and user.
+- ### Multi-file source resolution — future requirement
+  The existing import_batch_id records when a file was imported; it must not be treated as the complete identity of a logical dataset.
+  Future ingestion architecture must be able to distinguish:
+  - import event;
+  - source file;
+  - source system;
+  - logical dataset;
+  - dataset version;
+  - coverage period;
+  - record identity.
+  Do not implement this resolution in the current package.
+  Do not change existing deduplication behaviour.
+  The purpose of this requirement is to prevent the current ingestion architecture from assuming that every new file is independent and should simply append to existing data.
 
 ## 9. Capability-gap model
 
 One vocabulary everywhere (UI, docs, audit log):
 
-| Stage | Meaning | Example today |
-|---|---|---|
-| Unknown | Cannot classify confidently | Unrecognised sheet |
-| Recognised | Business meaning understood | Consumption log |
-| Stored | Safely persisted with provenance | (needs §3/§4) |
-| Canonicalised | Mapped into a canonical domain | Sales transactions |
+
+| Stage            | Meaning                              | Example today          |
+| ---------------- | ------------------------------------ | ---------------------- |
+| Unknown          | Cannot classify confidently          | Unrecognised sheet     |
+| Recognised       | Business meaning understood          | Consumption log        |
+| Stored           | Safely persisted with provenance     | (needs §3/§4)          |
+| Canonicalised    | Mapped into a canonical domain       | Sales transactions     |
 | Planning-enabled | An engine is validated to consume it | Monthly sales → engine |
+
 
 Recognition never implies planning eligibility; lack of planning support never implies discard. The `capability` descriptor (§4) is the single source of truth the UI renders.
 
@@ -126,6 +199,8 @@ Recognition never implies planning eligibility; lack of planning support never i
 - **6.5d — Feeds the planning-engine audit** (separate, already-tracked): forecast consumption precedence, consumption-aware demand rules, movement-vs-snapshot reconciliation, zero-value handling. Not implemented here.
 
 ## 12. Explicitly outside scope
+
+- Multi-file logical dataset resolution, source/version management and overlap resolution — future ingestion package.
 
 - AI / autonomous classification or learned aliases (deterministic signals only).
 - FX conversion, reporting currency, tariffs — store verbatim, convert never (needs a dedicated finance package).
