@@ -1,7 +1,7 @@
 import { csvToSheets } from "./csv-source";
 import { xlsxToSheets, looksLikeXlsx, WorkbookError } from "./xlsx-source";
 import { LIMITS, type SheetTable } from "./sheet-table";
-import type { ColumnMapping, EntityKind } from "./mapping";
+import { definitionFor, type ColumnMapping, type EntityCapability, type EntityKind } from "./mapping";
 import {
   classifyWorkbook,
   type DataRole,
@@ -37,6 +37,10 @@ export interface SheetPreview {
   missingRequired: string[];
   /** Set when a richer sheet covers the same data. */
   duplicateSource: string | null;
+  /** An interpretation Ionic is making that the user can override. */
+  assumption: string | null;
+  /** Whether rows persist and which planning surfaces consume them. */
+  capability: EntityCapability | null;
   /** What one row represents ("one row per SKU and month"). */
   grain: Grain;
   grainKey: string;
@@ -98,6 +102,8 @@ export function inspectSheets(filename: string, format: UploadFormat, sheets: Sh
       relationships: c.relationships,
       missingRequired: c.missingRequired,
       duplicateSource: c.duplicateSource,
+      assumption: c.assumption,
+      capability: definitionFor(c.kind)?.capability ?? null,
       grain: c.grain.grain,
       grainKey: c.grain.key,
       timeOrientation: c.timeOrientation,

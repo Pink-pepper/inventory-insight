@@ -18,6 +18,7 @@ import {
   type KeySet,
 } from "./relationships";
 import { parseDate } from "./validate";
+import { movementValueShare } from "@/lib/domain/movement";
 
 /**
  * Workbook classification: decides what each sheet most likely contains, maps
@@ -64,6 +65,9 @@ export interface SheetClassification {
   /** Name of a richer sheet covering the same data (duplicate source). */
   duplicateSource: string | null;
   disposition: Disposition;
+  /** An interpretation Ionic is making that the user can override, stated
+   *  plainly (e.g. "treated as customer sales"). Null when nothing is assumed. */
+  assumption: string | null;
   rowCount: number;
   /** What one row represents, inferred from values. */
   grain: GrainInfo;
@@ -305,6 +309,7 @@ function baseClassification(
     relationships: [],
     duplicateSource: null,
     disposition,
+    assumption: null,
     rowCount: sheet.rowCount,
     grain,
     timeOrientation: orientationOf(grain, kind),
@@ -405,7 +410,7 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     }
 
     const scored = ENTITY_DEFINITIONS
-      .filter((d) => !d.surfaceOnly || d.kind === "inventory_movement")
+      .filter((d) => !d.surfaceOnly)
       .map((def) => scoreEntity(sheet, profile, def));
     const valid = scored.filter((s) => s.missingRequired.length === 0 && s.score > 0);
 
@@ -471,8 +476,9 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     }
 
     // Sales vs non-sales movement: both are day-grain SKU+quantity. Movement
-    // wins only with explicit evidence (movement vocabulary or negative
-    // quantities) and the absence of commercial fields.
+    // wins only with explicit evidence — movement vocabulary in a header,
+    // movement vocabulary in the *values* of a type/reason column, or signed
+    // quantities — and the absence of commercial fields.
     if (best.def.kind === "transactions" || best.def.kind === "inventory_movement") {
       const movementCand = candidates.find((s) => s.def.kind === "inventory_movement");
       const commercial = best.matches.some((m) =>
@@ -484,32 +490,40 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       // not merely that the movement entity shares sku/date/quantity columns
       // with transactions.
       const MOVEMENT_WORDS = /received|issued|issuance|adjust|consum|usage|movement|withdraw|transfer|delta|write.?off|shrink/;
+      const typeMatch = movementCand?.matches.find((m) => m.field === "movement_type");
       const movementVocabulary =
         movementCand != null &&
-        movementCand.matches.some(
-          (m) =>
-            m.field === "movement_type" ||
-            (m.field === "movement_qty" && MOVEMENT_WORDS.test(headerKey(sheet.headers[m.column] ?? ""))),
-        );
+        (typeMatch != null ||
+          movementCand.matches.some(
+            (m) => m.field === "movement_qty" && MOVEMENT_WORDS.test(headerKey(sheet.headers[m.column] ?? "")),
+          ));
+      // A generically-headed type column ("Type", "Reason") whose values are
+      // movement words (consumption, damage, transfer…) is equally strong
+      // evidence — value-scan, not just header vocabulary.
+      const movementValues =
+        typeMatch != null && movementValueShare(columnValues(sheet, typeMatch.column).slice(0, 200)) >= 0.3;
       const signedQuantities = qtyProfile != null && qtyProfile.negativeShare >= 0.05;
-      if (!commercial && (movementVocabulary || signedQuantities)) {
-        const mapping: ColumnMapping = { ...best.mapping };
-        if ("quantity" in mapping) {
-          mapping["movement_qty"] = mapping["quantity"]!;
-          delete mapping["quantity"];
+      if (!commercial && (movementVocabulary || movementValues || signedQuantities)) {
+        const mapping: ColumnMapping = { ...(movementCand?.mapping ?? {}) };
+        if (!("movement_qty" in mapping) && "quantity" in best.mapping) {
+          mapping["movement_qty"] = best.mapping["quantity"]!;
         }
+        for (const field of ["sku", "transaction_date", "location", "source_ref", "currency_code", "original_amount", "cogs"]) {
+          if (!(field in mapping) && field in best.mapping) mapping[field] = best.mapping[field]!;
+        }
+        const strong = signedQuantities || movementValues;
         return baseClassification(
           sheet,
           "inventory_movement",
-          "unsupported",
-          signedQuantities
-            ? "Dated signed quantities per SKU without prices or customers — this looks like consumption or stock adjustment, not sales. Ionic cannot store movements yet, so this sheet is reported but not imported."
-            : "Dated movement quantities per SKU without prices or customers — this looks like non-sales stock movement. Ionic cannot store movements yet, so this sheet is reported but not imported.",
+          strong ? "auto" : "review",
+          strong
+            ? "Dated quantities per SKU without prices or customers, with movement evidence — this looks like consumption or stock adjustment, not sales. Stored as inventory movement records; they never enter sales history or demand planning."
+            : "Dated movement quantities per SKU without prices or customers — this looks like non-sales stock movement. Stored as inventory movement records; they never enter sales history or demand planning.",
           grain,
           {
-            confidence: signedQuantities ? "high" : "medium",
+            confidence: strong ? "high" : "medium",
             mapping,
-            fieldReasons: best.matches.map((m) => m.reason),
+            fieldReasons: (movementCand ?? best).matches.map((m) => m.reason),
             unmappedHeaders: unmappedHeaders(sheet, mapping),
           },
         );
@@ -534,11 +548,22 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       reason = "Monthly SKU quantities, but the periods are in the future — if this is a forecast, review it as Demand forecast; historical periods are required for sales history.";
     }
 
+    // Sales without any commercial evidence is an assumption, not a fact:
+    // state it plainly so the user can reclassify the sheet as movements.
+    const commercialMatched = best.matches.some((m) =>
+      ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code"].includes(m.field),
+    );
+    const assumption =
+      kind === "transactions" && !commercialMatched
+        ? "No prices, customers or channels were found — Ionic is treating these quantities as customer sales. If they are really consumption or stock adjustments, reclassify this sheet as Inventory movements."
+        : null;
+
     return baseClassification(sheet, kind, disposition, reason, grain, {
       confidence,
       mapping: best.mapping,
       fieldReasons: best.matches.map((m) => m.reason),
       unmappedHeaders: unmappedHeaders(sheet, best.mapping),
+      assumption,
     });
   });
 

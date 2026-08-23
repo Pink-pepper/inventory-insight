@@ -4,6 +4,7 @@ import type {
   CanonicalDataset,
   CanonicalForecast,
   CanonicalInventory,
+  CanonicalMovement,
   CanonicalProduct,
   CanonicalPurchaseOrder,
   CanonicalSale,
@@ -12,6 +13,7 @@ import type {
   PurchaseOrderApprovalStatus,
   PurchaseOrderStatus,
 } from "@/lib/domain/model";
+import { movementClassFromReason } from "@/lib/domain/movement";
 import { csvConnector } from "@/lib/connectors/csv-connector";
 import { LIMITS, cell, type SheetTable } from "./sheet-table";
 import type { ColumnMapping, EntityKind } from "./mapping";
@@ -42,6 +44,7 @@ const emptyDataset = (): Required<CanonicalDataset> => ({
   transactions: [],
   purchaseOrders: [],
   forecasts: [],
+  movements: [],
 });
 
 function supplierCodeFrom(code: string, name: string): string {
@@ -81,6 +84,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   const transactions: CanonicalTransaction[] = [];
   const purchaseOrders: CanonicalPurchaseOrder[] = [];
   const forecasts = new Map<string, CanonicalForecast>();
+  const movements: CanonicalMovement[] = [];
   const referenced = new Set<string>();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -209,7 +213,11 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           const location = safeText(get(row, "location"), "MAIN");
           const asOf = parseDate(get(row, "as_of")) ?? today;
           referenced.add(sku);
-          inventory.set(`${sku}|${location}`, { sku, onHand: onHand.value, onOrder: onOrder.value ?? 0, location, asOf });
+          const key = `${sku}|${location}`;
+          if (inventory.has(key)) {
+            log.add(sheet.sheetName, rowNo, "sku", `A second row for ${sku} at ${location} appears in this import — the later row replaces the earlier one.`, "warning");
+          }
+          inventory.set(key, { sku, onHand: onHand.value, onOrder: onOrder.value ?? 0, location, asOf });
           rowsAccepted++;
           return;
         }
@@ -404,7 +412,11 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           // The fingerprint identifies the forecast cell (SKU, period,
           // location) only — scenario bounds are updated by re-import, never
           // duplicated.
-          forecasts.set(`${sku}|${periodMonth}|${location}`, {
+          const key = `${sku}|${periodMonth}|${location}`;
+          if (forecasts.has(key)) {
+            log.add(sheet.sheetName, rowNo, "sku", `A second forecast for ${sku} in ${periodMonth.slice(0, 7)} at ${location} appears in this import — the later row replaces the earlier one.`, "warning");
+          }
+          forecasts.set(key, {
             sku,
             periodMonth,
             baselineQty: base.value,
@@ -414,6 +426,53 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
             location,
             sourceRef: safeText(get(row, "source_ref")) || null,
             rowHash: rowHash([sku, periodMonth, location]),
+          });
+          rowsAccepted++;
+          return;
+        }
+
+        case "inventory_movement": {
+          const sku = safeText(get(row, "sku"));
+          if (!sku) return reject("sku", "Missing SKU. Row rejected.");
+          const occurredOn = parseDate(get(row, "transaction_date"));
+          if (!occurredOn) return reject("transaction_date", `Unrecognised date "${get(row, "transaction_date")}". Row rejected.`);
+          const qty = num(row, "movement_qty");
+          const value = num(row, "value");
+          const cogs = num(row, "cogs");
+          const original = num(row, "original_amount");
+          for (const [field, parsed] of [["movement_qty", qty], ["value", value], ["cogs", cogs], ["original_amount", original]] as const) {
+            if (parsed.malformed) return reject(field, `"${get(row, field)}" is not a valid number. Row rejected.`);
+            if (outOfRange(parsed.value)) return reject(field, `Value for ${field.replace(/_/g, " ")} is outside the supported range. Row rejected.`);
+          }
+          if (qty.value == null) return reject("movement_qty", "Missing movement quantity. Row rejected.");
+          if (occurredOn > today) {
+            log.add(sheet.sheetName, rowNo, "transaction_date", `${occurredOn} is in the future; the movement is kept but review whether the date is correct.`, "warning");
+          }
+          const currency = parseCurrency(get(row, "currency_code"));
+          if (get(row, "currency_code") && !currency) {
+            log.add(sheet.sheetName, rowNo, "currency_code", `"${get(row, "currency_code")}" is not a three-letter currency code and was not stored.`, "warning");
+          }
+          const sourceReason = safeText(get(row, "movement_type")) || null;
+          const movementClass = movementClassFromReason(sourceReason);
+          const location = safeText(get(row, "location")) || null;
+          const sourceRef = safeText(get(row, "source_ref")) || null;
+          referenced.add(sku);
+          // A value of 0 is valid and distinct from null (value not supplied).
+          // Direction comes from the signed quantity, never from a sign
+          // convention column.
+          movements.push({
+            sku,
+            occurredOn,
+            quantity: qty.value,
+            movementClass,
+            sourceReason,
+            location,
+            sourceRef,
+            value: value.value,
+            currencyCode: currency,
+            originalAmount: original.value,
+            cogs: cogs.value,
+            rowHash: rowHash([sku, occurredOn, qty.value, movementClass, sourceReason, location, sourceRef]),
           });
           rowsAccepted++;
           return;
@@ -456,6 +515,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   out.transactions = transactions;
   out.purchaseOrders = purchaseOrders;
   out.forecasts = [...forecasts.values()];
+  out.movements = movements;
 
   return {
     dataset: out,

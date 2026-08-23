@@ -7,8 +7,14 @@ import type { SheetTable } from "./sheet-table";
  * Kinds fall into three families:
  * - importable: rows flow into the canonical model (products, inventory, …)
  * - policy: parameter/value sheets, consumed through policy proposals only
- * - surface-only: recognised domains Ionic cannot store yet (movements,
- *   documentation) — reported, never silently dropped, never written.
+ * - surface-only: recognised domains Ionic cannot store yet (documentation)
+ *   — reported, never silently dropped, never written.
+ *
+ * Every kind also carries an explicit capability descriptor — whether rows
+ * are stored and which planning engines are validated to consume them. This
+ * is the single source of truth behind the UI's "Feeds planning" /
+ * "Stored as record" / "Recognised, not stored" messaging. Recognition never
+ * implies planning eligibility.
  */
 export type EntityKind =
   | "combined"
@@ -26,6 +32,14 @@ export type EntityKind =
   | "documentation"
   | "ignored";
 
+/** What Ionic does with a recognised domain, stated honestly. */
+export interface EntityCapability {
+  /** Rows persist in a canonical table with provenance. */
+  stored: boolean;
+  /** Planning surfaces validated to consume the domain (empty = record only). */
+  planningConsumers: string[];
+}
+
 export interface EntityDefinition {
   kind: EntityKind;
   label: string;
@@ -36,6 +50,24 @@ export interface EntityDefinition {
   optional: string[];
   /** Kinds that never persist rows through the sheet plan path. */
   surfaceOnly?: boolean;
+  capability: EntityCapability;
+}
+
+/** The badge + explanation the import UI renders for a recognised kind. */
+export function capabilityLabel(kind: EntityKind): { badge: string; detail: string } {
+  const def = definitionFor(kind);
+  if (!def) return { badge: "Not understood", detail: "Ionic could not match this sheet to a business domain it knows." };
+  const { stored, planningConsumers } = def.capability;
+  if (stored && planningConsumers.length > 0) {
+    return { badge: "Feeds planning", detail: `Stored and used by ${planningConsumers.join(", ")}.` };
+  }
+  if (stored) {
+    return { badge: "Stored as record", detail: "Stored with full provenance; no planning engine uses this data yet." };
+  }
+  if (kind === "planning_policy") {
+    return { badge: "Policy proposals only", detail: "Never imported as rows — values become proposals against the planning policy." };
+  }
+  return { badge: "Recognised, not stored", detail: "Ionic understands this data but has no destination for it yet. Nothing is imported." };
 }
 
 /** Alternative column names accepted from other systems, per canonical field. */
@@ -88,9 +120,10 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   high_qty: ["high", "high_case", "high_scenario", "high_qty", "optimistic", "upside", "high_estimate", "upper_bound", "high_units", "maximum_case"],
   forecast_method: ["forecast_method", "method", "model", "forecast_model", "technique", "forecast_technique"],
 
-  // Inventory movements / consumption (surface-only domain)
+  // Inventory movements / consumption
   movement_qty: ["movement_qty", "qty_change", "adjustment_qty", "consumed_qty", "consumption", "usage_qty", "issued_qty", "movement_quantity", "delta_qty", "qty_adjustment", "consumed", "usage", "issue_qty", "withdrawal_qty"],
-  movement_type: ["movement_type", "transaction_type", "movement_reason", "adjustment_type", "txn_type", "movement_code", "reason_code"],
+  movement_type: ["movement_type", "transaction_type", "movement_reason", "adjustment_type", "txn_type", "movement_code", "reason_code", "type", "reason"],
+  value: ["movement_value", "total_value", "extended_value", "extended_cost", "value_at_cost", "movement_amount"],
 
   // Planning policy / parameter sheets
   parameter: ["parameter", "setting", "policy_parameter", "assumption", "planning_parameter", "config", "configuration", "parameter_name", "policy_name", "input"],
@@ -109,6 +142,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "One row per SKU and month, carrying product, stock and demand columns together.",
     required: ["sku"],
     optional: ["product_name", "category", "unit_cost", "supplier_name", "supplier_code", "lead_time_days", "moq", "safety_stock_days", "on_hand", "on_order", "location", "month", "units_sold"],
+    capability: { stored: true, planningConsumers: ["recommendations", "demand planning", "supply planning"] },
   },
   {
     kind: "products",
@@ -116,6 +150,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "The item master: SKU, description, category, cost and ordering terms.",
     required: ["sku"],
     optional: ["product_name", "category", "unit_cost", "unit_price", "supplier_code", "supplier_name", "lead_time_days", "moq", "safety_stock_days"],
+    capability: { stored: true, planningConsumers: ["recommendations", "demand planning", "supply planning", "distribution"] },
   },
   {
     kind: "suppliers",
@@ -123,6 +158,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "Vendor master: name, code, lead time and ordering minimums.",
     required: ["supplier_name"],
     optional: ["supplier_code", "lead_time_days", "moq", "reliability"],
+    capability: { stored: true, planningConsumers: ["recommendations", "supply planning"] },
   },
   {
     kind: "inventory",
@@ -130,6 +166,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "Stock on hand and on order, optionally by location.",
     required: ["sku", "on_hand"],
     optional: ["on_order", "location", "as_of", "region", "state_province", "country"],
+    capability: { stored: true, planningConsumers: ["recommendations", "supply planning", "distribution"] },
   },
   {
     kind: "sales_monthly",
@@ -137,6 +174,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "One row per SKU and month with quantity sold.",
     required: ["sku", "month", "units_sold"],
     optional: ["revenue", "cogs"],
+    capability: { stored: true, planningConsumers: ["recommendations", "demand planning", "supply planning", "distribution"] },
   },
   {
     kind: "transactions",
@@ -144,6 +182,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "Day-level demand lines, optionally by customer, channel and location.",
     required: ["sku", "transaction_date", "quantity"],
     optional: ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code", "channel_name", "location", "region", "state_province", "currency_code", "original_amount", "source_ref"],
+    capability: { stored: true, planningConsumers: ["recommendations", "demand planning", "supply planning", "distribution"] },
   },
   {
     kind: "customers",
@@ -151,6 +190,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "Customer master: reference, name and segment.",
     required: ["customer_name"],
     optional: ["customer_ref", "segment"],
+    capability: { stored: true, planningConsumers: ["demand planning"] },
   },
   {
     kind: "channels",
@@ -158,6 +198,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     description: "Sales channel or route-to-market master.",
     required: ["channel_name"],
     optional: ["channel_code"],
+    capability: { stored: true, planningConsumers: ["demand planning"] },
   },
   {
     kind: "purchase_orders",
@@ -180,6 +221,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
       "currency_code",
       "buyer",
     ],
+    capability: { stored: true, planningConsumers: ["supply planning", "purchasing"] },
   },
   {
     kind: "demand_forecast",
@@ -188,15 +230,17 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
       "Forward-looking demand: one row per SKU and future period, with a baseline and optional low/high scenarios. Stored as forecast data, never mixed into sales history.",
     required: ["sku", "forecast_period", "baseline_qty"],
     optional: ["low_qty", "high_qty", "forecast_method", "location", "source_ref"],
+    // Stored with provenance; planning-engine consumption is a tracked follow-up.
+    capability: { stored: true, planningConsumers: [] },
   },
   {
     kind: "inventory_movement",
     label: "Inventory movements",
     description:
-      "Non-sales stock movements such as consumption, adjustments and issues. Ionic recognises this data but cannot store it yet — it is reported, not imported.",
+      "Non-sales stock movements such as consumption, sampling, damage, returns and adjustments. Stored as movement records with full provenance — they never enter sales history, and no planning engine consumes them yet.",
     required: ["sku", "transaction_date", "movement_qty"],
-    optional: ["movement_type", "location", "source_ref"],
-    surfaceOnly: true,
+    optional: ["movement_type", "location", "source_ref", "value", "currency_code", "original_amount", "cogs"],
+    capability: { stored: true, planningConsumers: [] },
   },
   {
     kind: "planning_policy",
@@ -206,6 +250,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     required: ["parameter", "param_value"],
     optional: ["param_unit", "sku", "supplier_code", "location", "doc_text"],
     surfaceOnly: true,
+    capability: { stored: false, planningConsumers: ["every planning engine, via accepted policy values"] },
   },
   {
     kind: "documentation",
@@ -214,6 +259,7 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
     required: ["doc_text"],
     optional: ["doc_section"],
     surfaceOnly: true,
+    capability: { stored: false, planningConsumers: [] },
   },
 ];
 

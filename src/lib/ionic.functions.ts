@@ -29,6 +29,7 @@ import {
   loadSignals,
   persistDataset,
   persistForecasts,
+  persistMovements,
   persistPurchaseOrders,
   persistTransactions,
   rebuildMonthlyForProducts,
@@ -351,6 +352,7 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     const tables = [
       "recommendations",
       "demand_forecasts",
+      "inventory_movements",
       "purchase_orders",
       "sales_transactions",
       "sales",
@@ -556,7 +558,7 @@ export const importUpload = createServerFn({ method: "POST" })
     const sheets = toSheets(format, payload);
 
     const plans: SheetPlan[] = data.plans.filter((p) => sheets.some((s) => s.sheetName === p.sheetName));
-    if (plans.every((p) => p.kind === "ignored" || p.kind === "planning_policy" || p.kind === "documentation" || p.kind === "inventory_movement")) {
+    if (plans.every((p) => p.kind === "ignored" || p.kind === "planning_policy" || p.kind === "documentation")) {
       throw new Error("No sheets were selected for import.");
     }
 
@@ -567,7 +569,8 @@ export const importUpload = createServerFn({ method: "POST" })
       result.dataset.sales.length === 0 &&
       (result.dataset.transactions?.length ?? 0) === 0 &&
       (result.dataset.purchaseOrders?.length ?? 0) === 0 &&
-      (result.dataset.forecasts?.length ?? 0) === 0
+      (result.dataset.forecasts?.length ?? 0) === 0 &&
+      (result.dataset.movements?.length ?? 0) === 0
     ) {
       throw new Error(
         result.issues.find((i) => i.severity === "error")?.message ??
@@ -589,10 +592,11 @@ export const importUpload = createServerFn({ method: "POST" })
       warnings: result.stats.warnings,
     });
 
-    const counts = await persistDataset(supabase, orgId, result.dataset);
+    const counts = await persistDataset(supabase, orgId, result.dataset, batchId);
     const tx = await persistTransactions(supabase, orgId, result.dataset, batchId);
     const pos = await persistPurchaseOrders(supabase, orgId, result.dataset.purchaseOrders, batchId);
     const fc = await persistForecasts(supabase, orgId, result.dataset.forecasts, batchId);
+    const mv = await persistMovements(supabase, orgId, result.dataset.movements, batchId);
 
     // Accepted policy proposals: the client sends (sheet, field) pairs only;
     // the values are re-derived from the file itself before anything is
@@ -659,6 +663,8 @@ export const importUpload = createServerFn({ method: "POST" })
       po_unknown_locations: pos.unknownLocations.length,
       forecasts: fc.inserted,
       forecast_duplicates: fc.duplicates,
+      movements: mv.inserted,
+      movement_duplicates: mv.duplicates,
       policy_applied: policyApplied.join(", "),
     });
     await audit(supabase, orgId, userId, "recommendations.generated", {
@@ -673,6 +679,7 @@ export const importUpload = createServerFn({ method: "POST" })
       transactions: tx,
       purchaseOrders: pos,
       forecasts: fc,
+      movements: mv,
       policyApplied,
       policySkipped,
       issues: result.issues,
@@ -748,7 +755,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
     }
     const batch = await getImportBatch(supabase, orgId, data.batchId);
     if (!batch) throw new Error("Import not found in this workspace.");
-    if (batch.status === "deleted") return { ok: true, already: true, transactions: 0, purchaseOrders: 0 };
+    if (batch.status === "deleted") return { ok: true, already: true, transactions: 0, purchaseOrders: 0, forecasts: 0, movements: 0 };
     if (batch.status !== "inactive") {
       throw new Error("Deactivate the import before deleting it permanently.");
     }
@@ -765,6 +772,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
       transactions_removed: removed.transactions,
       purchase_orders_removed: removed.purchaseOrders,
       forecasts_removed: removed.forecasts,
+      movements_removed: removed.movements,
       evaluated: run.evaluated,
     });
     return { ok: true, already: false, ...removed };

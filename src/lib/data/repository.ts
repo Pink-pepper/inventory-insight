@@ -5,6 +5,7 @@ import type {
   AuditEvent,
   CanonicalDataset,
   CanonicalForecast,
+  CanonicalMovement,
   CanonicalPurchaseOrder,
   ConnectorType,
   DataSource,
@@ -130,7 +131,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 /** Writes a canonical dataset into the tenant's tables (idempotent upserts). */
-export async function persistDataset(supabase: Db, orgId: string, dataset: CanonicalDataset) {
+export async function persistDataset(supabase: Db, orgId: string, dataset: CanonicalDataset, batchId: string | null = null) {
   if (dataset.suppliers.length) {
     const { error } = await supabase
       .from("suppliers")
@@ -191,6 +192,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
       on_order: i.onOrder,
       location: i.location,
       as_of: i.asOf,
+      import_batch_id: batchId,
     }));
   for (const part of chunk(invRows, 500)) {
     const { error } = await supabase
@@ -208,6 +210,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
       quantity: s.quantity,
       revenue: s.revenue,
       ...(s.cogs == null ? {} : { cogs: s.cogs }),
+      import_batch_id: batchId,
     }));
   for (const part of chunk(saleRows, 500)) {
     const { error } = await supabase
@@ -696,7 +699,7 @@ export async function deleteBatchRows(
   supabase: Db,
   orgId: string,
   batchId: string,
-): Promise<{ transactions: number; purchaseOrders: number; forecasts: number }> {
+): Promise<{ transactions: number; purchaseOrders: number; forecasts: number; movements: number }> {
   const tx = await supabase
     .from("sales_transactions")
     .delete()
@@ -718,10 +721,18 @@ export async function deleteBatchRows(
     .eq("import_batch_id", batchId)
     .select("id");
   if (fc.error) throw new Error(fc.error.message);
+  const mv = await supabase
+    .from("inventory_movements")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId)
+    .select("id");
+  if (mv.error) throw new Error(mv.error.message);
   return {
     transactions: (tx.data ?? []).length,
     purchaseOrders: (po.data ?? []).length,
     forecasts: (fc.data ?? []).length,
+    movements: (mv.data ?? []).length,
   };
 }
 
@@ -1437,6 +1448,96 @@ export async function persistForecasts(
     unknownSkus: [...unknownSkus],
     unknownLocations: [...unknownLocations],
   };
+}
+
+export interface MovementPersistResult {
+  inserted: number;
+  duplicates: number;
+  unknownSkus: string[];
+}
+
+/**
+ * Persists non-sales stock movements with fingerprint-based re-import
+ * detection. Movements are a record domain: stored with full provenance
+ * (source reference, row fingerprint, import batch, verbatim reason) and
+ * readable back for audit, but no planning engine consumes them. The
+ * per-class business semantics live in `@/lib/domain/movement`.
+ */
+export async function persistMovements(
+  supabase: Db,
+  orgId: string,
+  rows: CanonicalMovement[] | undefined,
+  batchId: string | null,
+): Promise<MovementPersistResult> {
+  const empty: MovementPersistResult = { inserted: 0, duplicates: 0, unknownSkus: [] };
+  const movements = rows ?? [];
+  if (movements.length === 0) return empty;
+
+  const [{ data: products, error: pErr }, { data: locations, error: lErr }] = await Promise.all([
+    supabase.from("products").select("id, sku").eq("org_id", orgId),
+    supabase.from("locations").select("id, code").eq("org_id", orgId),
+  ]);
+  if (pErr) throw new Error(pErr.message);
+  if (lErr) throw new Error(lErr.message);
+  const productIdBySku = new Map((products ?? []).map((p) => [p.sku, p.id]));
+  const locationIdByCode = new Map((locations ?? []).map((l) => [l.code.toLowerCase(), l.id]));
+
+  const hashes = [...new Set(movements.map((m) => m.rowHash))];
+  const existing = new Set<string>();
+  for (const part of chunk(hashes, 500)) {
+    const { data, error } = await supabase
+      .from("inventory_movements")
+      .select("source_row_hash")
+      .eq("org_id", orgId)
+      .in("source_row_hash", part);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) existing.add(row.source_row_hash);
+  }
+
+  const unknownSkus = new Set<string>();
+  const seen = new Set<string>();
+  let duplicates = 0;
+  const inserts: Database["public"]["Tables"]["inventory_movements"]["Insert"][] = [];
+
+  for (const m of movements) {
+    const productId = productIdBySku.get(m.sku);
+    if (!productId) {
+      unknownSkus.add(m.sku);
+      continue;
+    }
+    if (existing.has(m.rowHash) || seen.has(m.rowHash)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(m.rowHash);
+    // Locations resolve against the location master by code; an unknown code
+    // is kept as a null link rather than invented.
+    // Locations resolve against the location master by code; an unknown code
+    // is kept as a null link rather than invented.
+    const locationId = m.location ? (locationIdByCode.get(m.location.toLowerCase()) ?? null) : null;
+    inserts.push({
+      org_id: orgId,
+      product_id: productId,
+      occurred_on: m.occurredOn,
+      quantity: m.quantity,
+      movement_class: m.movementClass,
+      source_reason: m.sourceReason ?? null,
+      location_id: locationId,
+      source_ref: m.sourceRef ?? null,
+      value: m.value ?? null,
+      currency_code: m.currencyCode ?? null,
+      original_amount: m.originalAmount ?? null,
+      cogs: m.cogs ?? null,
+      source_row_hash: m.rowHash,
+      import_batch_id: batchId,
+    });
+  }
+
+  for (const part of chunk(inserts, 500)) {
+    const { error } = await supabase.from("inventory_movements").insert(part);
+    if (error) throw new Error(error.message);
+  }
+  return { inserted: inserts.length, duplicates, unknownSkus: [...unknownSkus] };
 }
 
 // ---------------------------------------------------------------------------
