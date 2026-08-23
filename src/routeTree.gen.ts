@@ -20,9 +20,9 @@ import { Route as AuthenticatedInventoryRouteImport } from './routes/_authentica
 import { Route as AuthenticatedOverviewRouteImport } from './routes/_authenticated/overview'
 import { Route as AuthenticatedPurchasingRouteImport } from './routes/_authenticated/purchasing'
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
-import { Route as AuthenticatedScenariosRouteImport } from './routes/_authenticated/scenarios'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSupplyPlanningRouteImport } from './routes/_authenticated/supply-planning'
+import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
 
@@ -84,11 +84,6 @@ const AuthenticatedRecommendationsRoute =
     path: '/recommendations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedScenariosRoute = AuthenticatedScenariosRouteImport.update({
-  id: '/scenarios',
-  path: '/scenarios',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -100,11 +95,17 @@ const AuthenticatedSupplyPlanningRoute =
     path: '/supply-planning',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedScenariosIndexRoute =
+  AuthenticatedScenariosIndexRouteImport.update({
+    id: '/scenarios/',
+    path: '/scenarios/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedScenariosScenarioIdRoute =
   AuthenticatedScenariosScenarioIdRouteImport.update({
-    id: '/$scenarioId',
-    path: '/$scenarioId',
-    getParentRoute: () => AuthenticatedScenariosRoute,
+    id: '/scenarios/$scenarioId',
+    path: '/scenarios/$scenarioId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSkuSkuRoute = AuthenticatedSkuSkuRouteImport.update({
   id: '/sku/$sku',
@@ -123,11 +124,11 @@ export interface FileRoutesByFullPath {
   '/overview': typeof AuthenticatedOverviewRoute
   '/purchasing': typeof AuthenticatedPurchasingRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
-  '/scenarios': typeof AuthenticatedScenariosRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -140,11 +141,11 @@ export interface FileRoutesByTo {
   '/overview': typeof AuthenticatedOverviewRoute
   '/purchasing': typeof AuthenticatedPurchasingRoute
   '/recommendations': typeof AuthenticatedRecommendationsRoute
-  '/scenarios': typeof AuthenticatedScenariosRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/scenarios': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -159,11 +160,11 @@ export interface FileRoutesById {
   '/_authenticated/overview': typeof AuthenticatedOverviewRoute
   '/_authenticated/purchasing': typeof AuthenticatedPurchasingRoute
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
-  '/_authenticated/scenarios': typeof AuthenticatedScenariosRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/supply-planning': typeof AuthenticatedSupplyPlanningRoute
   '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -178,11 +179,11 @@ export interface FileRouteTypes {
     | '/overview'
     | '/purchasing'
     | '/recommendations'
-    | '/scenarios'
     | '/settings'
     | '/supply-planning'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
+    | '/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -195,11 +196,11 @@ export interface FileRouteTypes {
     | '/overview'
     | '/purchasing'
     | '/recommendations'
-    | '/scenarios'
     | '/settings'
     | '/supply-planning'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
+    | '/scenarios'
   id:
     | '__root__'
     | '/'
@@ -213,11 +214,11 @@ export interface FileRouteTypes {
     | '/_authenticated/overview'
     | '/_authenticated/purchasing'
     | '/_authenticated/recommendations'
-    | '/_authenticated/scenarios'
     | '/_authenticated/settings'
     | '/_authenticated/supply-planning'
     | '/_authenticated/scenarios/$scenarioId'
     | '/_authenticated/sku/$sku'
+    | '/_authenticated/scenarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -306,13 +307,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecommendationsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/scenarios': {
-      id: '/_authenticated/scenarios'
-      path: '/scenarios'
-      fullPath: '/scenarios'
-      preLoaderRoute: typeof AuthenticatedScenariosRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
@@ -327,12 +321,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSupplyPlanningRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/scenarios/': {
+      id: '/_authenticated/scenarios/'
+      path: '/scenarios'
+      fullPath: '/scenarios/'
+      preLoaderRoute: typeof AuthenticatedScenariosIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/scenarios/$scenarioId': {
       id: '/_authenticated/scenarios/$scenarioId'
-      path: '/$scenarioId'
+      path: '/scenarios/$scenarioId'
       fullPath: '/scenarios/$scenarioId'
       preLoaderRoute: typeof AuthenticatedScenariosScenarioIdRouteImport
-      parentRoute: typeof AuthenticatedScenariosRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/sku/$sku': {
       id: '/_authenticated/sku/$sku'
@@ -344,21 +345,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AuthenticatedScenariosRouteChildren {
-  AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
-}
-
-const AuthenticatedScenariosRouteChildren: AuthenticatedScenariosRouteChildren =
-  {
-    AuthenticatedScenariosScenarioIdRoute:
-      AuthenticatedScenariosScenarioIdRoute,
-  }
-
-const AuthenticatedScenariosRouteWithChildren =
-  AuthenticatedScenariosRoute._addFileChildren(
-    AuthenticatedScenariosRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDataSourcesRoute: typeof AuthenticatedDataSourcesRoute
   AuthenticatedDemandPlanningRoute: typeof AuthenticatedDemandPlanningRoute
@@ -367,10 +353,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOverviewRoute: typeof AuthenticatedOverviewRoute
   AuthenticatedPurchasingRoute: typeof AuthenticatedPurchasingRoute
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
-  AuthenticatedScenariosRoute: typeof AuthenticatedScenariosRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSupplyPlanningRoute: typeof AuthenticatedSupplyPlanningRoute
+  AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
+  AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -381,10 +368,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOverviewRoute: AuthenticatedOverviewRoute,
   AuthenticatedPurchasingRoute: AuthenticatedPurchasingRoute,
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
-  AuthenticatedScenariosRoute: AuthenticatedScenariosRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSupplyPlanningRoute: AuthenticatedSupplyPlanningRoute,
+  AuthenticatedScenariosScenarioIdRoute: AuthenticatedScenariosScenarioIdRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
+  AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

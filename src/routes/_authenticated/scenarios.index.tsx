@@ -19,7 +19,7 @@ import { createScenario, deleteScenario, listScenarios } from "@/lib/ionic.funct
 import type { ScenarioRecord } from "@/lib/scenario/types";
 import { hasAssumptions } from "@/lib/scenario/assumptions";
 
-export const Route = createFileRoute("/_authenticated/scenarios")({
+export const Route = createFileRoute("/_authenticated/scenarios/")({
   head: () => ({
     meta: [
       { title: "Scenario planning — Ionic" },
