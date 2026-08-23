@@ -58,7 +58,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   region: ["region", "zone", "territory", "sales_region"],
   state_province: ["state", "province", "state_province", "county"],
   country: ["country", "country_code", "country_name"],
-  month: ["month", "sales_month", "period_month", "yyyy_mm", "month_year", "fiscal_period"],
+  month: ["month", "sales_month", "period_month", "yyyy_mm", "month_year", "fiscal_period", "period"],
   units_sold: ["units_sold", "qty_sold", "sales_qty", "quantity_sold", "sales_units", "sold_qty"],
   revenue: ["revenue", "sales_value", "net_sales", "turnover", "amount", "value", "line_total", "net_revenue", "sales_amount", "ext_price", "line_value", "net_amount", "net_value"],
   cogs: ["cogs", "cost_of_goods", "cost_of_sales", "total_cost", "cost_amount"],

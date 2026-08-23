@@ -463,7 +463,10 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     const forecastCand = candidates.find((s) => s.def.kind === "demand_forecast");
     const monthlyCand = candidates.find((s) => s.def.kind === "sales_monthly");
     if (forecastCand && (best.def.kind === "sales_monthly" || best.def.kind === "demand_forecast")) {
-      if (orientation === "forward" || !monthlyCand) best = forecastCand;
+      // Forward orientation is the only signal that may promote a sheet to
+      // forecast; historical/current periods always remain sales history.
+      if (orientation === "forward") best = forecastCand;
+      else if (monthlyCand) best = monthlyCand;
     }
 
     // Sales vs non-sales movement: both are day-grain SKU+quantity. Movement
@@ -475,7 +478,12 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
         ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code"].includes(m.field),
       );
       const qtyProfile = profile[best.mapping["quantity"] ?? -1];
-      const movementVocabulary = movementCand != null;
+      // Movement vocabulary means a column actually matched movement-specific
+      // fields (movement_qty/movement_type aliases) — not merely that the
+      // movement entity shares sku/date columns with transactions.
+      const movementVocabulary =
+        movementCand != null &&
+        movementCand.matches.some((m) => m.field === "movement_qty" || m.field === "movement_type");
       const signedQuantities = qtyProfile != null && qtyProfile.negativeShare >= 0.05;
       if (!commercial && (movementVocabulary || signedQuantities)) {
         const mapping: ColumnMapping = { ...best.mapping };

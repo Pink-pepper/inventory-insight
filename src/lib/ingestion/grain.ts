@@ -177,7 +177,7 @@ export function orientationOf(grain: GrainInfo, kind: string): TimeOrientation {
   if (kind === "planning_policy") return "policy";
   if (grain.futureShare == null) return "not_dated";
   if (grain.futureShare >= 0.6) return "forward";
-  if (grain.grain === "snapshot") return "current_state";
   if (grain.futureShare <= 0.05) return "historical";
+  if (grain.grain === "snapshot") return "current_state";
   return "historical";
 }
