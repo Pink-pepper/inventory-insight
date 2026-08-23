@@ -309,6 +309,7 @@ function baseClassification(
     relationships: [],
     duplicateSource: null,
     disposition,
+    assumption: null,
     rowCount: sheet.rowCount,
     grain,
     timeOrientation: orientationOf(grain, kind),
@@ -409,7 +410,7 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     }
 
     const scored = ENTITY_DEFINITIONS
-      .filter((d) => !d.surfaceOnly || d.kind === "inventory_movement")
+      .filter((d) => !d.surfaceOnly)
       .map((def) => scoreEntity(sheet, profile, def));
     const valid = scored.filter((s) => s.missingRequired.length === 0 && s.score > 0);
 
