@@ -6,6 +6,8 @@
  * anything about CSV column names or ERP schemas.
  */
 
+import type { MovementClass } from "./movement";
+
 export type ConnectorType = "csv" | "odoo" | "sap" | "dynamics" | "netsuite" | "custom_api";
 
 export type RecommendationAction = "REORDER" | "WATCH" | "HOLD" | "EXCESS";
