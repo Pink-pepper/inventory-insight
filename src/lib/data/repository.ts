@@ -645,7 +645,13 @@ export async function persistTransactions(
     if (error) throw new Error(error.message);
   }
 
-  const monthsRefreshed = await refreshMonthlySales(supabase, orgId, [...affected]);
+  // Inactive imports never contribute to the monthly grain the engine reads.
+  const monthsRefreshed = await refreshMonthlySales(
+    supabase,
+    orgId,
+    [...affected],
+    await inactiveBatchIds(supabase, orgId),
+  );
   return { inserted: rows.length, duplicates, unknownSkus: [...unknown].slice(0, 25), monthsRefreshed };
 }
 
@@ -658,16 +664,21 @@ export async function refreshMonthlySales(
   supabase: Db,
   orgId: string,
   productIds: string[],
+  excludeBatchIds: string[] = [],
 ): Promise<number> {
   if (productIds.length === 0) return 0;
   const totals = new Map<string, { productId: string; month: string; quantity: number; revenue: number; cogs: number | null }>();
 
   for (const part of chunk(productIds, 100)) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("sales_transactions")
       .select("product_id, occurred_on, quantity, value, unit_price, cogs")
       .eq("org_id", orgId)
       .in("product_id", part);
+    if (excludeBatchIds.length > 0) {
+      query = query.not("import_batch_id", "in", `(${excludeBatchIds.join(",")})`);
+    }
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
     for (const row of data ?? []) {
       const month = `${row.occurred_on.slice(0, 7)}-01`;
