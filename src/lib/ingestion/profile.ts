@@ -1,6 +1,6 @@
 import { cell, type SheetTable } from "./sheet-table";
 import { headerKey } from "./mapping";
-import { isMissingToken } from "./validate";
+import { isMissingToken, parseDate } from "./validate";
 
 /**
  * Column profiling: what the VALUES in each column look like, independent of
@@ -26,6 +26,14 @@ export interface ColumnProfile {
   uniqueRatio: number;
   /** Shared letter prefix of identifier values ("SKU", "CUS"), when consistent. */
   idPrefix: string | null;
+  /** Share of numeric values below zero — consumption/adjustment signal. */
+  negativeShare: number;
+  /** Values are month-period shaped (2026-09, Sep-2026) rather than day dates. */
+  monthStyle: boolean;
+  /** Values look like ranges ("14–45", "10-35%") — never collapsed to a scalar. */
+  rangeLike: boolean;
+  /** Dominant values are qualitative words (low/moderate/high…). */
+  qualitative: boolean;
   /** Up to 5 example values. */
   samples: string[];
 }
@@ -43,10 +51,23 @@ const DATE_PATTERNS = [
   /^\d{4}[-/]\d{1,2}$/,
 ];
 
+/** Month-period shapes only: "2026-09", "Sep-2026", "Sep 2026". */
+const MONTH_PERIOD_PATTERNS = [
+  /^\d{4}[-/]\d{1,2}$/,
+  new RegExp(`^${MONTH}[a-z]*[- /]\\d{4}$`, "i"),
+  new RegExp(`^\\d{4}[- ]${MONTH}[a-z]*$`, "i"),
+];
+
 /** Textual date shapes only — bare numbers are quantities until a header says otherwise. */
 export function looksLikeDateString(value: string): boolean {
   const v = value.trim();
   return DATE_PATTERNS.some((p) => p.test(v));
+}
+
+/** True when a value is a month-period without a day component. */
+export function looksLikeMonthPeriod(value: string): boolean {
+  const v = value.trim();
+  return MONTH_PERIOD_PATTERNS.some((p) => p.test(v));
 }
 
 export function looksLikeNumber(value: string): boolean {
@@ -60,6 +81,28 @@ export function looksLikeNumber(value: string): boolean {
   // behind is an identifier, not a number.
   if (body.length / inner.trim().length < 0.7) return false;
   return Number.isFinite(Number(body));
+}
+
+/**
+ * Ranges and tolerances: "14–45", "10-35%", "±5", "4–8x", "18 to 60".
+ * A plain negative number is NOT a range.
+ */
+export function looksLikeRange(value: string): boolean {
+  const v = value.trim();
+  if (/^±/.test(v)) return true;
+  if (/^\d+(\.\d+)?\s*(to|–|—|\.\.)\s*\d+(\.\d+)?\s*(%|x|days?|months?|weeks?)?$/i.test(v)) return true;
+  // "14-45" style only when clearly two magnitudes, not a date or negative.
+  if (/^\d+(\.\d+)?-\d+(\.\d+)?\s*(%|x)?$/.test(v) && !looksLikeDateString(v)) return true;
+  return false;
+}
+
+const QUALITATIVE_TOKENS = new Set([
+  "low", "moderate", "medium", "high", "very_low", "very_high", "aggressive",
+  "conservative", "slow", "fast", "stable", "volatile", "seasonal",
+]);
+
+export function isQualitative(value: string): boolean {
+  return QUALITATIVE_TOKENS.has(value.trim().toLowerCase().replace(/[\s-]+/g, "_"));
 }
 
 /** Coded identifiers: letters plus digits, no spaces — SKU-0001, CUS-042, PO1002. */
@@ -86,6 +129,12 @@ export function profileSheet(sheet: SheetTable): ColumnProfile[] {
     const distinct = new Set<string>();
     const prefixes = new Map<string, number>();
     let nonEmpty = 0;
+    let numericCount = 0;
+    let negativeCount = 0;
+    let dateCount = 0;
+    let monthPeriodCount = 0;
+    let rangeCount = 0;
+    let qualitativeCount = 0;
 
     for (const row of rows) {
       const v = cell(row, index).trim();
@@ -96,14 +145,26 @@ export function profileSheet(sheet: SheetTable): ColumnProfile[] {
         counts.boolean++;
       } else if (looksLikeDateString(v)) {
         counts.date++;
+        dateCount++;
+        if (looksLikeMonthPeriod(v)) monthPeriodCount++;
       } else if (ID_PATTERN.test(v) && !looksLikeNumber(v)) {
         counts.identifier++;
         const prefix = idPrefixOf(v);
         if (prefix) prefixes.set(prefix, (prefixes.get(prefix) ?? 0) + 1);
       } else if (looksLikeNumber(v)) {
         counts.number++;
+        numericCount++;
+        if (parseDate(v) && /^\d+(\.\d+)?$/.test(v)) {
+          // Bare Excel serial — still numeric for our purposes.
+        }
+        const parsed = Number(v.replace(/[^0-9eE+\-.]/g, ""));
+        if (Number.isFinite(parsed) && (parsed < 0 || /^\(.*\)$/.test(v))) negativeCount++;
+      } else if (looksLikeRange(v)) {
+        counts.text++;
+        rangeCount++;
       } else {
         counts.text++;
+        if (isQualitative(v)) qualitativeCount++;
       }
     }
 
@@ -125,6 +186,10 @@ export function profileSheet(sheet: SheetTable): ColumnProfile[] {
         dominantType === "identifier" && topPrefix && nonEmpty > 0 && topPrefix[1] / nonEmpty >= 0.6
           ? topPrefix[0]
           : null,
+      negativeShare: numericCount === 0 ? 0 : negativeCount / numericCount,
+      monthStyle: dateCount > 0 && monthPeriodCount / dateCount >= 0.6,
+      rangeLike: nonEmpty > 0 && rangeCount / nonEmpty >= 0.3,
+      qualitative: nonEmpty > 0 && qualitativeCount / nonEmpty >= 0.5,
       samples: [...distinct].slice(0, 5),
     };
   });
