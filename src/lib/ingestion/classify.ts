@@ -1,7 +1,7 @@
 import {
   ENTITY_DEFINITIONS,
+  FIELD_ALIASES,
   definitionFor,
-  headerKey,
   type ColumnMapping,
   type EntityDefinition,
   type EntityKind,
@@ -202,7 +202,6 @@ function headerScore(field: string, col: ColumnProfile): number {
   return 0;
 }
 
-import { FIELD_ALIASES } from "./mapping";
 function aliasList(field: string): string[] {
   return FIELD_ALIASES[field] ?? [];
 }
@@ -319,7 +318,7 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       // Nothing fully recognised: find the nearest partial match, if any.
       const partial = scored
         .filter((s) => Object.keys(s.mapping).length >= 2)
-        .sort((a, b) => b.mapping && Object.keys(b.mapping).length - Object.keys(a.mapping).length)[0];
+        .sort((a, b) => Object.keys(b.mapping).length - Object.keys(a.mapping).length)[0];
       if (partial && partial.score === 0) {
         const kind = partial.def.kind;
         return {
@@ -490,5 +489,3 @@ function unmappedHeaders(sheet: SheetTable, mapping: ColumnMapping): string[] {
   const used = new Set(Object.values(mapping));
   return sheet.headers.filter((h, i) => h.trim() !== "" && !used.has(i));
 }
-
-export { headerKey };
