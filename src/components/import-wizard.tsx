@@ -336,8 +336,18 @@ export function ImportWizard() {
           title: "Needs review",
           sheets: inspection.sheets.filter(
             (s) =>
-              (s.disposition === "review" || s.disposition === "blocked") ||
-              (s.disposition === "auto" && (choices[s.sheetName]?.kind ?? "ignored") === "ignored"),
+              s.disposition === "review" ||
+              s.disposition === "blocked" ||
+              (s.disposition === "auto" && (choices[s.sheetName]?.kind ?? "ignored") === "ignored") ||
+              (s.disposition === "unsupported" && (choices[s.sheetName]?.kind ?? "ignored") !== "ignored"),
+          ),
+        },
+        {
+          key: "unsupported",
+          title: "Recognised, not stored",
+          sheets: inspection.sheets.filter(
+            (s) =>
+              s.disposition === "unsupported" && (choices[s.sheetName]?.kind ?? "ignored") === "ignored",
           ),
         },
         {
@@ -421,8 +431,69 @@ export function ImportWizard() {
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>{inspection.summary.auto} sheet{inspection.summary.auto === 1 ? "" : "s"} pre-approved</span>
             <span>{inspection.summary.review + inspection.summary.blocked} need review</span>
+            {inspection.summary.unsupported > 0 ? (
+              <span>{inspection.summary.unsupported} recognised, not stored</span>
+            ) : null}
             <span>{inspection.summary.ignored} excluded</span>
           </div>
+        </section>
+      ) : null}
+
+      {inspection && inspection.policyProposals.length > 0 ? (
+        <section className="panel p-5">
+          <h3 className="text-sm font-semibold">Planning parameters found in this file</h3>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Ionic recognised planning policy values in the workbook. Accept a value to update the
+            workspace planning policy, or keep what is already configured. Ranges and item-specific
+            values are never applied automatically.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {inspection.policyProposals.map((p) => {
+              const key = `${p.sheet}|${p.field}`;
+              const accepted = policyDecisions[key] ?? false;
+              const applicable = p.scope === "organisation" && p.proposed !== null;
+              return (
+                <li
+                  key={key}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium">
+                      {p.label}
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        workbook says: {p.rawValue}
+                        {p.unit ? ` ${p.unit}` : ""}
+                        {p.scope === "specific" ? ` · for ${p.scopeRef}` : ""}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{p.reason}</p>
+                  </div>
+                  {applicable ? (
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant={accepted ? "default" : "outline"}
+                        className="h-7 text-xs"
+                        onClick={() => setPolicyDecisions((prev) => ({ ...prev, [key]: true }))}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={accepted ? "outline" : "default"}
+                        className="h-7 text-xs"
+                        onClick={() => setPolicyDecisions((prev) => ({ ...prev, [key]: false }))}
+                      >
+                        Keep existing
+                      </Button>
+                    </div>
+                  ) : (
+                    <Pill tone="watch">Review only</Pill>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
 
