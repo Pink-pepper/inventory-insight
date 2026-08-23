@@ -26,13 +26,13 @@ import { money, num } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/supply-planning")({
   head: () => ({
     meta: [
-      { title: "Supply planning — Ionic" },
+      { title: "Supply Plan — Ionic" },
       {
         name: "description",
         content:
           "Given the demand plan and the current inventory position, what supply is required, when, and what could prevent it.",
       },
-      { property: "og:title", content: "Supply planning — Ionic" },
+      { property: "og:title", content: "Supply Plan — Ionic" },
       {
         property: "og:description",
         content: "Net requirements, order-by dates and fulfilment risks, explained line by line.",
@@ -57,11 +57,11 @@ function SupplyPlanningPage() {
 
   return (
     <AppShell
-      title="Supply planning"
+      title="Supply Plan"
       description="What supply is required, when it is required, and what could prevent it from being fulfilled."
       actions={
         <Button asChild size="sm" variant="outline">
-          <Link to="/purchasing">Purchasing</Link>
+          <Link to="/purchasing">Procurement</Link>
         </Button>
       }
     >

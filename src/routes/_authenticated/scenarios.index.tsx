@@ -22,13 +22,13 @@ import { hasAssumptions } from "@/lib/scenario/assumptions";
 export const Route = createFileRoute("/_authenticated/scenarios/")({
   head: () => ({
     meta: [
-      { title: "Scenario planning — Ionic" },
+      { title: "Scenario — Ionic" },
       {
         name: "description",
         content:
           "Test planning assumptions side by side: demand growth, lead times, safety stock and cost changes compared against your live plan without touching it.",
       },
-      { property: "og:title", content: "Scenario planning — Ionic" },
+      { property: "og:title", content: "Scenario — Ionic" },
       {
         property: "og:description",
         content:
@@ -82,7 +82,7 @@ function ScenariosPage() {
 
   return (
     <AppShell
-      title="Scenario planning"
+      title="Scenario"
       description="Change the assumptions, not the data. Every run compares against the live plan side by side."
       actions={
         <Button size="sm" onClick={() => setCreating(true)}>

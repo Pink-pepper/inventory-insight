@@ -13,13 +13,13 @@ import { money, num } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/distribution")({
   head: () => ({
     meta: [
-      { title: "Distribution planning — Ionic" },
+      { title: "Distribution — Ionic" },
       {
         name: "description",
         content:
           "Meet purchase requirements from your own network first: transfer suggestions from locations holding excess to locations that are short.",
       },
-      { property: "og:title", content: "Distribution planning — Ionic" },
+      { property: "og:title", content: "Distribution — Ionic" },
       {
         property: "og:description",
         content: "Internal stock transfer suggestions that reduce new purchasing, with the working shown.",
@@ -43,11 +43,11 @@ function DistributionPage() {
 
   return (
     <AppShell
-      title="Distribution planning"
+      title="Distribution"
       description="Before buying more: which locations can cover the requirement from their own excess."
       actions={
         <Button asChild size="sm" variant="outline">
-          <Link to="/supply-planning">Supply planning</Link>
+          <Link to="/supply-planning">Supply Plan</Link>
         </Button>
       }
     >

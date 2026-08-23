@@ -26,13 +26,13 @@ import { money, num } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/demand-planning")({
   head: () => ({
     meta: [
-      { title: "Demand planning — Ionic" },
+      { title: "Demand Plan — Ionic" },
       {
         name: "description",
         content:
           "Historical demand, a transparent trailing-average baseline and the inventory implications for every SKU in scope.",
       },
-      { property: "og:title", content: "Demand planning — Ionic" },
+      { property: "og:title", content: "Demand Plan — Ionic" },
       {
         property: "og:description",
         content: "Observed demand, planned demand and prioritised planning decisions.",
@@ -87,7 +87,7 @@ function DemandPlanningPage() {
 
   return (
     <AppShell
-      title="Demand planning"
+      title="Demand Plan"
       description="What demand has actually been, what it is planned to be, and what that means for stock."
     >
       {isLoading ? (

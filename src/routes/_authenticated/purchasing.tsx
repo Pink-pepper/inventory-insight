@@ -19,13 +19,13 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/purchasing")({
   head: () => ({
     meta: [
-      { title: "Purchasing — Ionic" },
+      { title: "Procurement — Ionic" },
       {
         name: "description",
         content:
           "Purchase order inbox: approval state, fulfilment progress, ETAs and outstanding value across every order.",
       },
-      { property: "og:title", content: "Purchasing — Ionic" },
+      { property: "og:title", content: "Procurement — Ionic" },
       {
         property: "og:description",
         content: "Track purchase order approvals and deliveries, and act on what is late or unreviewed.",
@@ -99,7 +99,7 @@ function PurchasingPage() {
 
   return (
     <AppShell
-      title="Purchasing"
+      title="Procurement"
       description="Purchase order visibility: what has been ordered, what is approved, what has arrived, and what is late."
       actions={
         <Button asChild size="sm" variant="outline">
