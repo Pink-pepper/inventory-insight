@@ -54,10 +54,15 @@ const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
  * dates and Excel serial numbers. Ambiguous or unparseable input returns null
  * rather than a guess.
  */
+const MONTH_NAMES: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
 export function parseDate(value: string | undefined): string | null {
   if (!value) return null;
   const v = value.trim();
-  if (v === "") return null;
+  if (v === "" || MISSING_TOKENS.has(v.toLowerCase())) return null;
 
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(v);
   if (iso) return isoOrNull(Number(iso[1]), Number(iso[2]), Number(iso[3]));
@@ -69,6 +74,16 @@ export function parseDate(value: string | undefined): string | null {
       return new Date(EXCEL_EPOCH_MS + Math.floor(serial) * 86_400_000).toISOString().slice(0, 10);
     }
     return null;
+  }
+
+  // Written month names: "23-Aug-26", "23 Aug 2026", "Aug 23 2026".
+  const dMon = /^(\d{1,2})[- ]([A-Za-z]{3,9})[- ](\d{2,4})$/.exec(v);
+  if (dMon) {
+    const month = MONTH_NAMES[dMon[2]!.slice(0, 3).toLowerCase()];
+    if (month) {
+      const year = Number(dMon[3]!.length === 2 ? `20${dMon[3]}` : dMon[3]);
+      return isoOrNull(year, month, Number(dMon[1]));
+    }
   }
 
   // dd/mm/yyyy and dd-mm-yyyy. Day-first is the convention outside the US and
