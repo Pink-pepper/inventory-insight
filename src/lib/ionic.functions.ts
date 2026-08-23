@@ -657,6 +657,9 @@ export const importUpload = createServerFn({ method: "POST" })
       purchase_orders_updated: pos.updated,
       po_duplicates: pos.duplicates,
       po_unknown_locations: pos.unknownLocations.length,
+      forecasts: fc.inserted,
+      forecast_duplicates: fc.duplicates,
+      policy_applied: policyApplied.join(", "),
     });
     await audit(supabase, orgId, userId, "recommendations.generated", {
       evaluated: run.evaluated,
@@ -669,6 +672,9 @@ export const importUpload = createServerFn({ method: "POST" })
       ...counts,
       transactions: tx,
       purchaseOrders: pos,
+      forecasts: fc,
+      policyApplied,
+      policySkipped,
       issues: result.issues,
       stats: result.stats,
       evaluated: run.evaluated,
@@ -758,6 +764,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
       filename: batch.filename,
       transactions_removed: removed.transactions,
       purchase_orders_removed: removed.purchaseOrders,
+      forecasts_removed: removed.forecasts,
       evaluated: run.evaluated,
     });
     return { ok: true, already: false, ...removed };
