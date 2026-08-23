@@ -294,34 +294,47 @@ export type Database = {
         Row: {
           as_of: string
           id: string
+          import_batch_id: string | null
           location: string
           location_id: string | null
           on_hand: number
           on_order: number
           org_id: string
           product_id: string
+          source_ref: string | null
         }
         Insert: {
           as_of?: string
           id?: string
+          import_batch_id?: string | null
           location?: string
           location_id?: string | null
           on_hand?: number
           on_order?: number
           org_id: string
           product_id: string
+          source_ref?: string | null
         }
         Update: {
           as_of?: string
           id?: string
+          import_batch_id?: string | null
           location?: string
           location_id?: string | null
           on_hand?: number
           on_order?: number
           org_id?: string
           product_id?: string
+          source_ref?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
           {
             foreignKeyName: "inventory_org_id_fkey"
             columns: ["org_id"]
@@ -338,6 +351,92 @@ export type Database = {
           },
           {
             foreignKeyName: "inventory_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      inventory_movements: {
+        Row: {
+          cogs: number | null
+          created_at: string
+          currency_code: string | null
+          id: string
+          import_batch_id: string | null
+          location_id: string | null
+          movement_class: Database["public"]["Enums"]["movement_class"]
+          occurred_on: string
+          org_id: string
+          original_amount: number | null
+          product_id: string
+          quantity: number
+          source_reason: string | null
+          source_ref: string | null
+          source_row_hash: string
+          value: number | null
+        }
+        Insert: {
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          movement_class?: Database["public"]["Enums"]["movement_class"]
+          occurred_on: string
+          org_id: string
+          original_amount?: number | null
+          product_id: string
+          quantity: number
+          source_reason?: string | null
+          source_ref?: string | null
+          source_row_hash: string
+          value?: number | null
+        }
+        Update: {
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          movement_class?: Database["public"]["Enums"]["movement_class"]
+          occurred_on?: string
+          org_id?: string
+          original_amount?: number | null
+          product_id?: string
+          quantity?: number
+          source_reason?: string | null
+          source_ref?: string | null
+          source_row_hash?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movements_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "movements_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "movements_org_product_fkey"
             columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
@@ -785,31 +884,44 @@ export type Database = {
         Row: {
           cogs: number | null
           id: string
+          import_batch_id: string | null
           org_id: string
           period_month: string
           product_id: string
           quantity: number
           revenue: number
+          source_ref: string | null
         }
         Insert: {
           cogs?: number | null
           id?: string
+          import_batch_id?: string | null
           org_id: string
           period_month: string
           product_id: string
           quantity?: number
           revenue?: number
+          source_ref?: string | null
         }
         Update: {
           cogs?: number | null
           id?: string
+          import_batch_id?: string | null
           org_id?: string
           period_month?: string
           product_id?: string
           quantity?: number
           revenue?: number
+          source_ref?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sales_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
           {
             foreignKeyName: "sales_org_id_fkey"
             columns: ["org_id"]
@@ -1108,6 +1220,20 @@ export type Database = {
         | "dynamics"
         | "netsuite"
         | "custom_api"
+      movement_class:
+        | "sale"
+        | "consumption"
+        | "sampling"
+        | "promotional"
+        | "service_use"
+        | "damage"
+        | "expiry"
+        | "quality_loss"
+        | "return"
+        | "adjustment"
+        | "transfer"
+        | "assembly"
+        | "other"
       org_role: "owner" | "admin" | "member"
       po_approval_status: "needs_review" | "approved" | "rejected"
       po_status: "draft" | "placed" | "received" | "cancelled" | "closed"
@@ -1246,6 +1372,21 @@ export const Constants = {
         "dynamics",
         "netsuite",
         "custom_api",
+      ],
+      movement_class: [
+        "sale",
+        "consumption",
+        "sampling",
+        "promotional",
+        "service_use",
+        "damage",
+        "expiry",
+        "quality_loss",
+        "return",
+        "adjustment",
+        "transfer",
+        "assembly",
+        "other",
       ],
       org_role: ["owner", "admin", "member"],
       po_approval_status: ["needs_review", "approved", "rejected"],
