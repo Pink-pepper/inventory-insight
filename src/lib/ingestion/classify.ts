@@ -548,11 +548,22 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       reason = "Monthly SKU quantities, but the periods are in the future — if this is a forecast, review it as Demand forecast; historical periods are required for sales history.";
     }
 
+    // Sales without any commercial evidence is an assumption, not a fact:
+    // state it plainly so the user can reclassify the sheet as movements.
+    const commercialMatched = best.matches.some((m) =>
+      ["revenue", "unit_price", "cogs", "customer_ref", "customer_name", "channel_code"].includes(m.field),
+    );
+    const assumption =
+      kind === "transactions" && !commercialMatched
+        ? "No prices, customers or channels were found — Ionic is treating these quantities as customer sales. If they are really consumption or stock adjustments, reclassify this sheet as Inventory movements."
+        : null;
+
     return baseClassification(sheet, kind, disposition, reason, grain, {
       confidence,
       mapping: best.mapping,
       fieldReasons: best.matches.map((m) => m.reason),
       unmappedHeaders: unmappedHeaders(sheet, best.mapping),
+      assumption,
     });
   });
 
