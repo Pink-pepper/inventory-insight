@@ -412,7 +412,11 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           // The fingerprint identifies the forecast cell (SKU, period,
           // location) only — scenario bounds are updated by re-import, never
           // duplicated.
-          forecasts.set(`${sku}|${periodMonth}|${location}`, {
+          const key = `${sku}|${periodMonth}|${location}`;
+          if (forecasts.has(key)) {
+            log.add(sheet.sheetName, rowNo, "sku", `A second forecast for ${sku} in ${periodMonth.slice(0, 7)} at ${location} appears in this import — the later row replaces the earlier one.`, "warning");
+          }
+          forecasts.set(key, {
             sku,
             periodMonth,
             baselineQty: base.value,
