@@ -4,6 +4,7 @@ import type {
   AuditDetailValue,
   AuditEvent,
   CanonicalDataset,
+  CanonicalForecast,
   CanonicalPurchaseOrder,
   ConnectorType,
   DataSource,
@@ -695,7 +696,7 @@ export async function deleteBatchRows(
   supabase: Db,
   orgId: string,
   batchId: string,
-): Promise<{ transactions: number; purchaseOrders: number }> {
+): Promise<{ transactions: number; purchaseOrders: number; forecasts: number }> {
   const tx = await supabase
     .from("sales_transactions")
     .delete()
@@ -710,7 +711,18 @@ export async function deleteBatchRows(
     .eq("import_batch_id", batchId)
     .select("id");
   if (po.error) throw new Error(po.error.message);
-  return { transactions: (tx.data ?? []).length, purchaseOrders: (po.data ?? []).length };
+  const fc = await supabase
+    .from("demand_forecasts")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId)
+    .select("id");
+  if (fc.error) throw new Error(fc.error.message);
+  return {
+    transactions: (tx.data ?? []).length,
+    purchaseOrders: (po.data ?? []).length,
+    forecasts: (fc.data ?? []).length,
+  };
 }
 
 type CustomerRow = Database["public"]["Tables"]["customers"]["Insert"];

@@ -376,6 +376,49 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           return;
         }
 
+        case "demand_forecast": {
+          const sku = safeText(get(row, "sku"));
+          if (!sku) return reject("sku", "Missing SKU. Row rejected.");
+          const iso = parseDate(get(row, "forecast_period"));
+          if (!iso) return reject("forecast_period", `Unrecognised period "${get(row, "forecast_period")}". Row rejected.`);
+          const base = num(row, "baseline_qty");
+          const low = num(row, "low_qty");
+          const high = num(row, "high_qty");
+          for (const [field, parsed] of [["baseline_qty", base], ["low_qty", low], ["high_qty", high]] as const) {
+            if (parsed.malformed) return reject(field, `"${get(row, field)}" is not a valid number. Row rejected.`);
+            if (outOfRange(parsed.value)) return reject(field, `Value for ${field.replace(/_/g, " ")} is outside the supported range. Row rejected.`);
+          }
+          if (base.value == null) return reject("baseline_qty", "Missing baseline quantity. Row rejected.");
+          if (base.value < 0 || (low.value ?? 0) < 0 || (high.value ?? 0) < 0) {
+            return reject("baseline_qty", "Forecast quantities cannot be negative. Row rejected.");
+          }
+          const periodMonth = monthOf(iso);
+          if (periodMonth <= `${today.slice(0, 7)}-01`) {
+            log.add(sheet.sheetName, rowNo, "forecast_period", `Period ${periodMonth.slice(0, 7)} is not in the future — the row is kept, but review whether this is really forward demand.`, "warning");
+          }
+          if (low.value != null && high.value != null && low.value > high.value) {
+            log.add(sheet.sheetName, rowNo, "low_qty", "The low scenario exceeds the high scenario; values are kept as provided.", "warning");
+          }
+          const location = safeText(get(row, "location"), "MAIN");
+          referenced.add(sku);
+          // The fingerprint identifies the forecast cell (SKU, period,
+          // location) only — scenario bounds are updated by re-import, never
+          // duplicated.
+          forecasts.set(`${sku}|${periodMonth}|${location}`, {
+            sku,
+            periodMonth,
+            baselineQty: base.value,
+            lowQty: low.value,
+            highQty: high.value,
+            method: safeText(get(row, "forecast_method")) || null,
+            location,
+            sourceRef: safeText(get(row, "source_ref")) || null,
+            rowHash: rowHash([sku, periodMonth, location]),
+          });
+          rowsAccepted++;
+          return;
+        }
+
         case "customers": {
           const name = safeText(get(row, "customer_name"));
           if (!name) return reject("customer_name", "Missing customer name. Row rejected.");
@@ -412,6 +455,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   out.channels = [...channels.values()];
   out.transactions = transactions;
   out.purchaseOrders = purchaseOrders;
+  out.forecasts = [...forecasts.values()];
 
   return {
     dataset: out,
