@@ -4,6 +4,7 @@ import type {
   CanonicalDataset,
   CanonicalForecast,
   CanonicalInventory,
+  CanonicalMovement,
   CanonicalProduct,
   CanonicalPurchaseOrder,
   CanonicalSale,
@@ -12,6 +13,7 @@ import type {
   PurchaseOrderApprovalStatus,
   PurchaseOrderStatus,
 } from "@/lib/domain/model";
+import { movementClassFromReason } from "@/lib/domain/movement";
 import { csvConnector } from "@/lib/connectors/csv-connector";
 import { LIMITS, cell, type SheetTable } from "./sheet-table";
 import type { ColumnMapping, EntityKind } from "./mapping";
@@ -42,6 +44,7 @@ const emptyDataset = (): Required<CanonicalDataset> => ({
   transactions: [],
   purchaseOrders: [],
   forecasts: [],
+  movements: [],
 });
 
 function supplierCodeFrom(code: string, name: string): string {
