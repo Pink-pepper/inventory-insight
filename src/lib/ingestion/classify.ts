@@ -1,6 +1,7 @@
 import {
   ENTITY_DEFINITIONS,
   FIELD_ALIASES,
+  canonicalField,
   definitionFor,
   headerKey,
   type ColumnMapping,
@@ -491,9 +492,19 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       // with transactions.
       const MOVEMENT_WORDS = /received|issued|issuance|adjust|consum|usage|movement|withdraw|transfer|delta|write.?off|shrink/;
       const typeMatch = movementCand?.matches.find((m) => m.field === "movement_type");
+      // The type/reason column can also be found directly: a movement sheet
+      // whose quantity header is generic ("Qty") never produces a movement
+      // candidate (movement_qty stays unmapped), but its "Type" column still
+      // identifies the domain.
+      const typeColumn =
+        typeMatch?.column ??
+        (() => {
+          const idx = sheet.headers.findIndex((h) => canonicalField(h, ["movement_type"]) === "movement_type");
+          return idx >= 0 ? idx : null;
+        })();
       const movementVocabulary =
-        movementCand != null &&
-        (typeMatch != null ||
+        typeColumn != null ||
+        (movementCand != null &&
           movementCand.matches.some(
             (m) => m.field === "movement_qty" && MOVEMENT_WORDS.test(headerKey(sheet.headers[m.column] ?? "")),
           ));
@@ -501,12 +512,15 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       // movement words (consumption, damage, transfer…) is equally strong
       // evidence — value-scan, not just header vocabulary.
       const movementValues =
-        typeMatch != null && movementValueShare(columnValues(sheet, typeMatch.column).slice(0, 200)) >= 0.3;
+        typeColumn != null && movementValueShare(columnValues(sheet, typeColumn).slice(0, 200)) >= 0.3;
       const signedQuantities = qtyProfile != null && qtyProfile.negativeShare >= 0.05;
       if (!commercial && (movementVocabulary || movementValues || signedQuantities)) {
         const mapping: ColumnMapping = { ...(movementCand?.mapping ?? {}) };
         if (!("movement_qty" in mapping) && "quantity" in best.mapping) {
           mapping["movement_qty"] = best.mapping["quantity"]!;
+        }
+        if (typeColumn != null && !("movement_type" in mapping)) {
+          mapping["movement_type"] = typeColumn;
         }
         for (const field of ["sku", "transaction_date", "location", "source_ref", "currency_code", "original_amount", "cogs"]) {
           if (!(field in mapping) && field in best.mapping) mapping[field] = best.mapping[field]!;
