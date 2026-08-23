@@ -28,6 +28,7 @@ import {
   loadOpenSupply,
   loadSignals,
   persistDataset,
+  persistForecasts,
   persistPurchaseOrders,
   persistTransactions,
   rebuildMonthlyForProducts,
@@ -349,6 +350,7 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     // (audit trail) and soft-retired instead of hard-deleted.
     const tables = [
       "recommendations",
+      "demand_forecasts",
       "purchase_orders",
       "sales_transactions",
       "sales",
@@ -462,6 +464,10 @@ const ENTITY_KINDS = [
   "customers",
   "channels",
   "purchase_orders",
+  "demand_forecast",
+  "inventory_movement",
+  "planning_policy",
+  "documentation",
   "ignored",
 ] as const;
 
@@ -476,6 +482,19 @@ const importInput = uploadInput.extend({
     )
     .min(1)
     .max(30),
+  /** Which policy proposals the user accepted: (sheet, field) pairs only.
+   *  Values are never trusted from the client — they are re-derived from the
+   *  file on the server before anything is applied. */
+  policyDecisions: z
+    .array(
+      z.object({
+        sheet: z.string().min(1).max(200),
+        field: z.string().min(1).max(64),
+        accepted: z.boolean(),
+      }),
+    )
+    .max(50)
+    .optional(),
 });
 
 /** Sanitises a client-supplied filename down to a safe basename. */
