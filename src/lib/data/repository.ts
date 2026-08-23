@@ -1354,21 +1354,24 @@ export async function getScenarioRun(
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Scenario run not found.");
-  const stored = data.row_results as Omit<ScenarioRunResult, "baselineSummary" | "scenarioSummary">;
+  const stored = data.row_results as unknown as Omit<
+    ScenarioRunResult,
+    "baselineSummary" | "scenarioSummary"
+  >;
+  const baselineSummary =
+    data.baseline_summary as unknown as ScenarioRunRecord["baselineSummary"];
+  const scenarioSummary =
+    data.scenario_summary as unknown as ScenarioRunRecord["scenarioSummary"];
   return {
     id: data.id,
     scenarioId: data.scenario_id,
     version: data.version,
     assumptions: (data.assumptions ?? {}) as ScenarioAssumptions,
     scope: (data.scope ?? {}) as PlanningFilter,
-    baselineSummary: data.baseline_summary as ScenarioRunRecord["baselineSummary"],
-    scenarioSummary: data.scenario_summary as ScenarioRunRecord["scenarioSummary"],
-    result: {
-      ...stored,
-      baselineSummary: data.baseline_summary as ScenarioRunResult["baselineSummary"],
-      scenarioSummary: data.scenario_summary as ScenarioRunResult["scenarioSummary"],
-    },
-    inputProvenance: data.input_provenance as ScenarioRunRecord["inputProvenance"],
+    baselineSummary,
+    scenarioSummary,
+    result: { ...stored, baselineSummary, scenarioSummary },
+    inputProvenance: data.input_provenance as unknown as ScenarioRunRecord["inputProvenance"],
     createdBy: data.created_by,
     createdAt: data.created_at,
   };
