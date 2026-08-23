@@ -5,6 +5,7 @@ import type {
   AuditEvent,
   CanonicalDataset,
   CanonicalForecast,
+  CanonicalMovement,
   CanonicalPurchaseOrder,
   ConnectorType,
   DataSource,
@@ -130,7 +131,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 /** Writes a canonical dataset into the tenant's tables (idempotent upserts). */
-export async function persistDataset(supabase: Db, orgId: string, dataset: CanonicalDataset) {
+export async function persistDataset(supabase: Db, orgId: string, dataset: CanonicalDataset, batchId: string | null = null) {
   if (dataset.suppliers.length) {
     const { error } = await supabase
       .from("suppliers")
@@ -191,6 +192,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
       on_order: i.onOrder,
       location: i.location,
       as_of: i.asOf,
+      import_batch_id: batchId,
     }));
   for (const part of chunk(invRows, 500)) {
     const { error } = await supabase
@@ -208,6 +210,7 @@ export async function persistDataset(supabase: Db, orgId: string, dataset: Canon
       quantity: s.quantity,
       revenue: s.revenue,
       ...(s.cogs == null ? {} : { cogs: s.cogs }),
+      import_batch_id: batchId,
     }));
   for (const part of chunk(saleRows, 500)) {
     const { error } = await supabase
