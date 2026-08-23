@@ -47,34 +47,36 @@ One run executes the whole chain in a single server function; engines are untouc
 
 ## C. Scenario control matrix
 
-| Control | Exists today? | Can be overridden? | Data sufficient? | Package 6 action |
-|---|---|---|---|---|
-| Demand growth % | Yes (`demandGrowthPct`, consumed by baseline) | Yes — policy override | Yes | **Support v1** |
-| Historical demand window | Yes (`demandWindowMonths`) | Yes — policy override | Yes | **Support v1** |
-| Planning horizon | Yes (`planningHorizonDays` → reviewPeriodDays) | Yes — policy override | Yes | **Support v1** |
-| Demand method | Stored (`trailing_average` only) | No alternative exists | N/A | Disabled — only one method exists |
-| Safety stock | Yes (`safetyStockDays`, product + policy) | Yes — policy + per-SKU override | Yes | **Support v1** |
-| Target stock | Derived (lead + review + safety) | Indirectly via those inputs | Yes | Support via lead/horizon/safety overrides |
-| Lead time | Yes (product/supplier/policy cascade) | Yes — input transform: org-wide delta or per-supplier override | Yes | **Support v1** |
-| Lead-time variability | Stored, NOT consumed by any engine | No engine effect | N/A | Disabled — no consumer |
-| MOQ | Yes (product/supplier/policy) | Yes — input transform | Yes | **Support v1** |
-| Order multiple | Yes (`orderMultiple`) | Yes — policy override | Yes | **Support v1** |
-| Supplier cost | Yes (`unit_cost`) | Yes — input transform % per supplier | Yes (single currency assumed; stated) | **Support v1** (spend impact only) |
-| ETA / delivery delay | Yes (`expected_at` on open POs) | Yes — shift all ETAs by N days | Yes | **Support v1** |
-| Supply availability | Partial (PO status exists) | Could exclude PO lines | Partial | Deferred — defer to keep v1 small |
-| Distribution assumptions | Cover thresholds in engine config | Technically yes | Partial (location demand = transactions only) | Deferred — distribution output re-runs automatically via scenario supply rows |
-| FX | `currency_code` stored on transactions/POs, no rates | No | **No** | Disabled — "FX rates not available" |
-| Tariffs | No | No | **No** | Outside Package 6 |
-| Seasonality | Stored flag, NOT consumed | No engine effect | No | Disabled — honest limitation |
+
+| Control                  | Exists today?                                        | Can be overridden?                                             | Data sufficient?                              | Package 6 action                                                              |
+| ------------------------ | ---------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Demand growth %          | Yes (`demandGrowthPct`, consumed by baseline)        | Yes — policy override                                          | Yes                                           | **Support v1**                                                                |
+| Historical demand window | Yes (`demandWindowMonths`)                           | Yes — policy override                                          | Yes                                           | **Support v1**                                                                |
+| Planning horizon         | Yes (`planningHorizonDays` → reviewPeriodDays)       | Yes — policy override                                          | Yes                                           | **Support v1**                                                                |
+| Demand method            | Stored (`trailing_average` only)                     | No alternative exists                                          | N/A                                           | Disabled — only one method exists                                             |
+| Safety stock             | Yes (`safetyStockDays`, product + policy)            | Yes — policy + per-SKU override                                | Yes                                           | **Support v1**                                                                |
+| Target stock             | Derived (lead + review + safety)                     | Indirectly via those inputs                                    | Yes                                           | Support via lead/horizon/safety overrides                                     |
+| Lead time                | Yes (product/supplier/policy cascade)                | Yes — input transform: org-wide delta or per-supplier override | Yes                                           | **Support v1**                                                                |
+| Lead-time variability    | Stored, NOT consumed by any engine                   | No engine effect                                               | N/A                                           | Disabled — no consumer                                                        |
+| MOQ                      | Yes (product/supplier/policy)                        | Yes — input transform                                          | Yes                                           | **Support v1**                                                                |
+| Order multiple           | Yes (`orderMultiple`)                                | Yes — policy override                                          | Yes                                           | **Support v1**                                                                |
+| Supplier cost            | Yes (`unit_cost`)                                    | Yes — input transform % per supplier                           | Yes (single currency assumed; stated)         | **Support v1** (spend impact only)                                            |
+| ETA / delivery delay     | Yes (`expected_at` on open POs)                      | Yes — shift all ETAs by N days                                 | Yes                                           | **Support v1**                                                                |
+| Supply availability      | Partial (PO status exists)                           | Could exclude PO lines                                         | Partial                                       | Deferred — defer to keep v1 small                                             |
+| Distribution assumptions | Cover thresholds in engine config                    | Technically yes                                                | Partial (location demand = transactions only) | Deferred — distribution output re-runs automatically via scenario supply rows |
+| FX                       | `currency_code` stored on transactions/POs, no rates | No                                                             | **No**                                        | Disabled — "FX rates not available"                                           |
+| Tariffs                  | No                                                   | No                                                             | **No**                                        | Outside Package 6                                                             |
+| Seasonality              | Stored flag, NOT consumed                            | No engine effect                                               | No                                            | Disabled — honest limitation                                                  |
+
 
 ## D. Proposed data model (minimum additive schema)
 
 Two tables, both org-scoped, RLS + GRANTs following the existing pattern:
 
-**`scenarios`** — the definition (mutable):
+`**scenarios**` — the definition (mutable):
 `id, org_id, name, description, status ('draft'|'active'|'archived'), scope jsonb (existing filter spec subset), assumptions jsonb (validated override object), created_by → auth.users, created_at, updated_at` (+ `touch_updated_at` trigger).
 
-**`scenario_runs`** — immutable versioned results (append-only, like `audit_logs`/`import_batches`: no UPDATE/DELETE policies):
+`**scenario_runs**` — immutable versioned results (append-only, like `audit_logs`/`import_batches`: no UPDATE/DELETE policies):
 `id, org_id, scenario_id → scenarios, version integer (per-scenario sequence), assumptions jsonb (frozen copy), baseline_summary jsonb, scenario_summary jsonb, row_results jsonb (per-SKU baseline vs scenario key figures), input_provenance jsonb (data timestamp, source coverage, lastRun ref), created_by, created_at`.
 
 Assumptions as **validated JSONB** (Zod schema at every boundary), not normalized columns — the override set will evolve and mirrors the existing policy shape. No third table.
@@ -95,7 +97,7 @@ Engines receive scenario configuration through their existing arguments. No engi
 Recommended: **C — persist both configuration and output snapshots** (the brief's option C).
 
 - Editing a scenario updates `scenarios` (definition is mutable; it is not a result).
-- **Run = immutable version.** Re-running after an assumption change inserts a new `scenario_runs` row with `version = max+1` and a frozen copy of the assumptions. Previous runs are never overwritten — full traceability.
+- **Run = immutable version.** Re-running after an assumption change inserts a new `scenario_runs` row with `version = max+1` and a frozen copy of the assumptions. Previous runs are never overwritten — full traceability. Scenario execution is strictly read-only against all live planning and operational data. Persisting a scenario definition or scenario run may only write to the scenario/scenario_runs tables. A scenario run must never mutate planning policies, inventory, recommendations, purchase orders, distribution state, or source data.
 - Full per-SKU row results stored as JSONB: at demo scale (50 SKUs) this is kilobytes; cap at a documented limit (e.g. 2,000 rows/run) with an explicit truncation flag if ever hit.
 - Each run stores `input_provenance` (calculation timestamp, demand-fact coverage, recommendation `run_id` the engine rows derive from) so a saved scenario stays interpretable after live data changes — and gives Package 7 its anchor.
 
@@ -116,9 +118,9 @@ Absolute change always shown; percentage only for non-zero baselines. Zero basel
 One new workspace `src/routes/_authenticated/scenarios.tsx` (+ optional `$scenarioId` detail), nav entry in `app-shell.tsx` ("Scenarios" after Distribution). Reuses existing components: `planning-filters`, `status-badge`, metric cards, explanation panels, table/chart patterns from Supply Planning.
 
 1. **Scenario list** — name, status, versions count, last run at, created by.
-2. **Builder** — name/description, scope picker (existing filter control), assumption controls (only supported ones; unsupported ones visibly disabled with the reason), Run button.
+2. **Builder** — name/description, scope picker (existing filter control), Scenario scope must remain context-aware. Location-based scenario scope should only be presented where the organisation has multiple active planning locations. Single-location organisations should not be presented with unnecessary multi-location controls, assumption controls (only supported ones; unsupported ones visibly disabled with the reason), Run button. 
 3. **Results** — what-changed panel (assumption diffs), impact summary (demand/supply/distribution/procurement deltas), per-SKU comparison table, deterministic explanation ("Lead time 30→45 raised reorder point …, moving stockout from October to September").
-4. **Versions** — run history per scenario; select two versions to compare later (v1: compare run vs its own baseline only; run-vs-run comparison is a stated v1.1 candidate).
+4. **Versions** — run history per scenario. The planner can select two completed runs and compare them using the same deterministic variance framework used for baseline-vs-scenario comparison. At minimum, show changes in demand, projected inventory, net requirement, suggested procurement, distribution opportunity and applicable risks.
 
 No redesign; no new visual language.
 
@@ -132,7 +134,7 @@ No redesign; no new visual language.
 
 ## J. Performance
 
-Synchronous execution is safe. A run = the same ~5 org-scoped queries the Supply Planning page already does + two in-memory passes of the engine chain (~50 SKUs, ~600 sales rows). This already happens on every Supply/Distribution page load today with no issue. No queues, no background jobs. If future data volumes (10k+ SKUs) demand it, the immutable-run table is already the right shape for async execution later — noted, not built.
+Synchronous execution is safe. A run = the same 5 org-scoped queries the Supply Planning page already does + two in-memory passes of the engine chain (50 SKUs, ~600 sales rows). This already happens on every Supply/Distribution page load today with no issue. No queues, no background jobs. If future data volumes (10k+ SKUs) demand it, the immutable-run table is already the right shape for async execution later — noted, not built.
 
 ## K. Backward compatibility
 
@@ -151,9 +153,8 @@ Explicitly NOT built: autonomous monitoring, proactive alerts, agentic/AI scenar
 
 1. **Currency mixing** — `unit_cost` has no currency on products; cost comparisons assume one currency. Stated in UI when spend is shown; FX explicitly out.
 2. **Location demand** exists only in day-grain transactions; scenario distribution results carry the existing `noLocationDemand` honesty flag.
-3. **Run-vs-run comparison** (two scenario versions directly) deferred to v1.1 — confirm acceptable.
-4. **Scenario scope** v1 = one filter set per scenario applied to the whole run; per-SKU-different assumptions (e.g. growth +20% for one SKU only) are supported via scope+override but the UI keeps it simple: one assumption set per scenario.
-5. Run size cap value (2,000 rows) is a guess — trivially adjustable.
+3. **Scenario scope** v1 = one filter set per scenario applied to the whole run; per-SKU-different assumptions (e.g. growth +20% for one SKU only) are supported via scope+override but the UI keeps it simple: one assumption set per scenario.
+4. Run size cap value (2,000 rows) is a guess — trivially adjustable.
 
 ## O. Implementation sequence
 
