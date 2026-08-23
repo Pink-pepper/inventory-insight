@@ -715,6 +715,16 @@ export async function refreshMonthlySales(
  * Monthly rows are never split into days to satisfy a finer grain.
  */
 export async function loadDemandFacts(supabase: Db, orgId: string): Promise<DemandFact[]> {
+  const inactive = await inactiveBatchIds(supabase, orgId);
+  let txQuery = supabase
+    .from("sales_transactions")
+    .select(
+      "product_id, occurred_on, quantity, value, cogs, region, state_province, customers(external_ref, name), channels(code, name), locations(code, name, country, region, state_province)",
+    )
+    .eq("org_id", orgId);
+  if (inactive.length > 0) {
+    txQuery = txQuery.not("import_batch_id", "in", `(${inactive.join(",")})`);
+  }
   const [{ data: products, error: pErr }, { data: monthly, error: mErr }, { data: txns, error: tErr }] =
     await Promise.all([
       supabase
@@ -725,12 +735,7 @@ export async function loadDemandFacts(supabase: Db, orgId: string): Promise<Dema
         .from("sales")
         .select("product_id, period_month, quantity, revenue, cogs")
         .eq("org_id", orgId),
-      supabase
-        .from("sales_transactions")
-        .select(
-          "product_id, occurred_on, quantity, value, cogs, region, state_province, customers(external_ref, name), channels(code, name), locations(code, name, country, region, state_province)",
-        )
-        .eq("org_id", orgId),
+      txQuery,
     ]);
   if (pErr) throw new Error(pErr.message);
   if (mErr) throw new Error(mErr.message);
@@ -831,11 +836,16 @@ export interface OpenSupplyLine {
  * cancelled orders are history, not supply, and are never returned here.
  */
 export async function loadOpenSupply(supabase: Db, orgId: string): Promise<OpenSupplyLine[]> {
-  const { data, error } = await supabase
+  const inactive = await inactiveBatchIds(supabase, orgId);
+  let query = supabase
     .from("purchase_orders")
     .select("id, product_id, quantity, received_quantity, expected_at, ordered_at, products(sku, name), suppliers(name), locations(code)")
     .eq("org_id", orgId)
     .eq("status", "placed");
+  if (inactive.length > 0) {
+    query = query.not("import_batch_id", "in", `(${inactive.join(",")})`);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? [])
     .map((row) => {
