@@ -84,6 +84,7 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
   const transactions: CanonicalTransaction[] = [];
   const purchaseOrders: CanonicalPurchaseOrder[] = [];
   const forecasts = new Map<string, CanonicalForecast>();
+  const movements: CanonicalMovement[] = [];
   const referenced = new Set<string>();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -212,7 +213,11 @@ export function canonicalise(sheets: SheetTable[], plans: SheetPlan[]): Canonica
           const location = safeText(get(row, "location"), "MAIN");
           const asOf = parseDate(get(row, "as_of")) ?? today;
           referenced.add(sku);
-          inventory.set(`${sku}|${location}`, { sku, onHand: onHand.value, onOrder: onOrder.value ?? 0, location, asOf });
+          const key = `${sku}|${location}`;
+          if (inventory.has(key)) {
+            log.add(sheet.sheetName, rowNo, "sku", `A second row for ${sku} at ${location} appears in this import — the later row replaces the earlier one.`, "warning");
+          }
+          inventory.set(key, { sku, onHand: onHand.value, onOrder: onOrder.value ?? 0, location, asOf });
           rowsAccepted++;
           return;
         }
