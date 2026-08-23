@@ -617,6 +617,93 @@ export const importUpload = createServerFn({ method: "POST" })
     };
   });
 
+/* ------------------------------------------------------------------ *
+ * Import lifecycle: list, deactivate/reactivate, delete
+ * ------------------------------------------------------------------ */
+
+/** Every visible import batch with live row counts and the caller's manage rights. */
+export const getImportBatches = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    const batches = await listImportBatches(supabase, orgId);
+    return { batches, canManage: role === "owner" || role === "admin" };
+  });
+
+/**
+ * Deactivate/reactivate an import. Its transaction and PO rows stay in place
+ * but stop feeding planning; the affected monthly aggregates are rebuilt and
+ * recommendations regenerated so every surface reflects the change at once.
+ */
+export const setImportBatchActive = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ batchId: z.string().uuid(), active: z.boolean() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change import state.");
+    }
+    const batch = await getImportBatch(supabase, orgId, data.batchId);
+    if (!batch) throw new Error("Import not found in this workspace.");
+    if (batch.status === "deleted") {
+      throw new Error("This import has been permanently deleted and can no longer be changed.");
+    }
+    const target = data.active ? "completed" : "inactive";
+    if (batch.status === target) return { ok: true, changed: false };
+
+    await setImportBatchStatus(supabase, orgId, batch.id, target);
+    const footprint = await batchDemandFootprint(supabase, orgId, batch.id);
+    const inactive = await inactiveBatchIds(supabase, orgId);
+    await rebuildMonthlyForProducts(supabase, orgId, footprint.productIds, footprint.months, inactive);
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, data.active ? "import.reactivated" : "import.deactivated", {
+      batch_id: batch.id,
+      filename: batch.filename,
+      products_recomputed: footprint.productIds.length,
+      evaluated: run.evaluated,
+    });
+    return { ok: true, changed: true };
+  });
+
+/**
+ * Permanently remove an import's transaction and PO rows. The batch must be
+ * inactive first (two-step guard); the batch record itself is kept for audit
+ * with status 'deleted' (hard deletes are blocked at the database level).
+ */
+export const deleteImportBatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ batchId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can delete imports.");
+    }
+    const batch = await getImportBatch(supabase, orgId, data.batchId);
+    if (!batch) throw new Error("Import not found in this workspace.");
+    if (batch.status === "deleted") return { ok: true, already: true };
+    if (batch.status !== "inactive") {
+      throw new Error("Deactivate the import before deleting it permanently.");
+    }
+
+    const footprint = await batchDemandFootprint(supabase, orgId, batch.id);
+    const removed = await deleteBatchRows(supabase, orgId, batch.id);
+    const inactive = await inactiveBatchIds(supabase, orgId);
+    await rebuildMonthlyForProducts(supabase, orgId, footprint.productIds, footprint.months, inactive);
+    await setImportBatchStatus(supabase, orgId, batch.id, "deleted");
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, "import.deleted", {
+      batch_id: batch.id,
+      filename: batch.filename,
+      transactions_removed: removed.transactions,
+      purchase_orders_removed: removed.purchaseOrders,
+      evaluated: run.evaluated,
+    });
+    return { ok: true, ...removed };
+  });
+
 /**
  * PO Inbox: every purchase order line in the workspace with derived
  * fulfilment status. Any member may read; only owners and admins may change
