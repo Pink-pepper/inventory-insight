@@ -663,9 +663,16 @@ function SheetCard({
             ? definitionFor(choice.kind)?.label ?? choice.kind
             : sheet.disposition === "ignored"
               ? "Excluded"
-              : "Not included"}
+              : sheet.disposition === "unsupported"
+                ? "Recognised, not stored"
+                : "Not included"}
         </Pill>
-        <span className="text-[11px] text-muted-foreground">{ROLE_LABEL[sheet.role]}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {ROLE_LABEL[sheet.role]}
+          {sheet.timeOrientation !== "not_dated" && sheet.timeOrientation !== "policy"
+            ? ` · ${ORIENTATION_LABEL[sheet.timeOrientation]}`
+            : ""}
+        </span>
         {suggestionAvailable ? (
           <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={onAccept}>
             <Check className="size-3.5" />
@@ -679,9 +686,9 @@ function SheetCard({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ignored">Do not import</SelectItem>
-                {ENTITY_DEFINITIONS.map((d) => (
-                  <SelectItem key={d.kind} value={d.kind}>
-                    {d.label}
+                {IMPORTABLE_KINDS.map((kind) => (
+                  <SelectItem key={kind} value={kind}>
+                    {definitionFor(kind)?.label ?? kind}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -694,6 +701,9 @@ function SheetCard({
         <>
           <div className="space-y-1.5 border-t border-border px-4 py-3">
             <p className="text-xs text-muted-foreground">{sheet.reason}</p>
+            <p className="text-[11px] text-muted-foreground">
+              Row grain: {sheet.grainKey}
+            </p>
             {sheet.fieldReasons.length ? (
               <ul className="space-y-0.5 text-xs text-muted-foreground">
                 {sheet.fieldReasons.map((r) => (
