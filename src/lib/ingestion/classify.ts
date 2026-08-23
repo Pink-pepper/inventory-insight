@@ -517,7 +517,7 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
       // movement words (consumption, damage, transfer…) is equally strong
       // evidence — value-scan, not just header vocabulary.
       const movementValues =
-        typeColumn != null && movementValueShare(columnValues(sheet, typeColumn).slice(0, 200)) >= 0.3;
+        typeColumn != null && movementValueShare([...columnValues(sheet, typeColumn)].slice(0, 200)) >= 0.3;
       const signedQuantities = qtyProfile != null && qtyProfile.negativeShare >= 0.05;
       if (!commercial && (movementVocabulary || movementValues || signedQuantities)) {
         const mapping: ColumnMapping = { ...(movementCand?.mapping ?? {}) };
