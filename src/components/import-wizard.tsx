@@ -14,17 +14,28 @@ import {
 } from "@/components/ui/select";
 import { importUpload, inspectUpload } from "@/lib/ionic.functions";
 import {
-  ENTITY_DEFINITIONS,
   FIELD_ALIASES,
+  IMPORTABLE_KINDS,
   definitionFor,
   type ColumnMapping,
   type EntityKind,
 } from "@/lib/ingestion/mapping";
 import { num } from "@/lib/format";
 
-type Role = "master" | "transactional" | "aggregate" | "snapshot" | "mixed" | "contextual" | "unknown";
+type Role =
+  | "master"
+  | "transactional"
+  | "aggregate"
+  | "snapshot"
+  | "mixed"
+  | "forecast"
+  | "policy"
+  | "movement"
+  | "documentation"
+  | "contextual"
+  | "unknown";
 type Confidence = "high" | "medium" | "low" | "unresolved";
-type Disposition = "auto" | "review" | "blocked" | "ignored";
+type Disposition = "auto" | "review" | "blocked" | "unsupported" | "ignored";
 
 interface SheetPreview {
   sheetName: string;
@@ -43,15 +54,33 @@ interface SheetPreview {
   relationships: string[];
   missingRequired: string[];
   duplicateSource: string | null;
+  grain: string;
+  grainKey: string;
+  timeOrientation: "historical" | "current_state" | "forward" | "policy" | "not_dated";
+}
+
+/** A planning-policy value Ionic recognised in the workbook, awaiting a decision. */
+interface PolicyProposal {
+  sheet: string;
+  field: string;
+  label: string;
+  rawValue: string;
+  proposed: number | boolean | null;
+  unit: string | null;
+  scope: "organisation" | "specific";
+  scopeRef: string | null;
+  status: "ready" | "review";
+  reason: string;
 }
 
 interface Inspection {
   format: "csv" | "xlsx";
   filename: string;
   sheets: SheetPreview[];
-  summary: { total: number; auto: number; review: number; blocked: number; ignored: number };
+  summary: { total: number; auto: number; review: number; blocked: number; unsupported: number; ignored: number };
   entities: { kind: EntityKind; label: string; records: number }[];
   demandMonths: number;
+  policyProposals: PolicyProposal[];
 }
 
 interface SheetChoice {
@@ -77,6 +106,9 @@ interface ImportOutcome {
     unknownSkus: string[];
     unknownSuppliers: string[];
   };
+  forecasts?: { inserted: number; duplicates: number; unknownSkus: string[] };
+  policyApplied?: string[];
+  policySkipped?: string[];
   evaluated: number;
 }
 
@@ -88,8 +120,20 @@ const ROLE_LABEL: Record<Role, string> = {
   aggregate: "Monthly totals",
   snapshot: "Stock snapshot",
   mixed: "Mixed",
+  forecast: "Forward demand",
+  policy: "Planning parameters",
+  movement: "Stock movement",
+  documentation: "Notes",
   contextual: "Reference",
   unknown: "Unknown",
+};
+
+const ORIENTATION_LABEL: Record<SheetPreview["timeOrientation"], string> = {
+  historical: "historical",
+  current_state: "current state",
+  forward: "forward-looking",
+  policy: "policy",
+  not_dated: "undated",
 };
 
 function fileToPayload(file: File): Promise<{ encoding: "text" | "base64"; content: string }> {
