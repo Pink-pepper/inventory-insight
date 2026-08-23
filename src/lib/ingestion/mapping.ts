@@ -7,8 +7,14 @@ import type { SheetTable } from "./sheet-table";
  * Kinds fall into three families:
  * - importable: rows flow into the canonical model (products, inventory, …)
  * - policy: parameter/value sheets, consumed through policy proposals only
- * - surface-only: recognised domains Ionic cannot store yet (movements,
- *   documentation) — reported, never silently dropped, never written.
+ * - surface-only: recognised domains Ionic cannot store yet (documentation)
+ *   — reported, never silently dropped, never written.
+ *
+ * Every kind also carries an explicit capability descriptor — whether rows
+ * are stored and which planning engines are validated to consume them. This
+ * is the single source of truth behind the UI's "Feeds planning" /
+ * "Stored as record" / "Recognised, not stored" messaging. Recognition never
+ * implies planning eligibility.
  */
 export type EntityKind =
   | "combined"
@@ -26,6 +32,14 @@ export type EntityKind =
   | "documentation"
   | "ignored";
 
+/** What Ionic does with a recognised domain, stated honestly. */
+export interface EntityCapability {
+  /** Rows persist in a canonical table with provenance. */
+  stored: boolean;
+  /** Planning surfaces validated to consume the domain (empty = record only). */
+  planningConsumers: string[];
+}
+
 export interface EntityDefinition {
   kind: EntityKind;
   label: string;
@@ -36,6 +50,24 @@ export interface EntityDefinition {
   optional: string[];
   /** Kinds that never persist rows through the sheet plan path. */
   surfaceOnly?: boolean;
+  capability: EntityCapability;
+}
+
+/** The badge + explanation the import UI renders for a recognised kind. */
+export function capabilityLabel(kind: EntityKind): { badge: string; detail: string } {
+  const def = definitionFor(kind);
+  if (!def) return { badge: "Not understood", detail: "Ionic could not match this sheet to a business domain it knows." };
+  const { stored, planningConsumers } = def.capability;
+  if (stored && planningConsumers.length > 0) {
+    return { badge: "Feeds planning", detail: `Stored and used by ${planningConsumers.join(", ")}.` };
+  }
+  if (stored) {
+    return { badge: "Stored as record", detail: "Stored with full provenance; no planning engine uses this data yet." };
+  }
+  if (kind === "planning_policy") {
+    return { badge: "Policy proposals only", detail: "Never imported as rows — values become proposals against the planning policy." };
+  }
+  return { badge: "Recognised, not stored", detail: "Ionic understands this data but has no destination for it yet. Nothing is imported." };
 }
 
 /** Alternative column names accepted from other systems, per canonical field. */
@@ -88,9 +120,10 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   high_qty: ["high", "high_case", "high_scenario", "high_qty", "optimistic", "upside", "high_estimate", "upper_bound", "high_units", "maximum_case"],
   forecast_method: ["forecast_method", "method", "model", "forecast_model", "technique", "forecast_technique"],
 
-  // Inventory movements / consumption (surface-only domain)
+  // Inventory movements / consumption
   movement_qty: ["movement_qty", "qty_change", "adjustment_qty", "consumed_qty", "consumption", "usage_qty", "issued_qty", "movement_quantity", "delta_qty", "qty_adjustment", "consumed", "usage", "issue_qty", "withdrawal_qty"],
-  movement_type: ["movement_type", "transaction_type", "movement_reason", "adjustment_type", "txn_type", "movement_code", "reason_code"],
+  movement_type: ["movement_type", "transaction_type", "movement_reason", "adjustment_type", "txn_type", "movement_code", "reason_code", "type", "reason"],
+  value: ["movement_value", "total_value", "extended_value", "extended_cost", "value_at_cost", "movement_amount"],
 
   // Planning policy / parameter sheets
   parameter: ["parameter", "setting", "policy_parameter", "assumption", "planning_parameter", "config", "configuration", "parameter_name", "policy_name", "input"],
