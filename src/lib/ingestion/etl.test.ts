@@ -4,6 +4,8 @@ import { classifyWorkbook } from "./classify";
 import { parseDate, parseNumber } from "./validate";
 import { emptySheet, type SheetTable } from "./sheet-table";
 import { extractPolicyProposals } from "./policy-detect";
+import { canonicalise } from "./canonicalise";
+import { capabilityLabel } from "./mapping";
 
 function sheet(name: string, headers: string[], rows: string[][]): SheetTable {
   return { sheetName: name, headers, rows, rowCount: rows.length, truncated: false };
