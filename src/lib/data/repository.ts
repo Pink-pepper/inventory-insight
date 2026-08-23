@@ -25,6 +25,14 @@ import {
 import { evaluateAll, resolveEngineConfig } from "@/lib/engine/inventory-engine";
 import { rowHash } from "@/lib/ingestion/validate";
 import type { DemandFact } from "@/lib/demand/series";
+import type { PlanningFilter } from "@/lib/query/filters";
+import type { ScenarioAssumptions } from "@/lib/scenario/assumptions";
+import type { ScenarioRunResult } from "@/lib/scenario/run";
+import type {
+  ScenarioRecord,
+  ScenarioRunRecord,
+  ScenarioRunSummaryRecord,
+} from "@/lib/scenario/types";
 
 export type Db = SupabaseClient<Database>;
 
