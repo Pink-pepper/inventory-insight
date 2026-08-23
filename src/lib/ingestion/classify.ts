@@ -483,7 +483,6 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
           mapping["movement_qty"] = mapping["quantity"]!;
           delete mapping["quantity"];
         }
-        const moveDef = definitionFor("inventory_movement")!;
         return baseClassification(
           sheet,
           "inventory_movement",

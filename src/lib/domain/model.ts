@@ -121,6 +121,24 @@ export interface CanonicalPurchaseOrder {
   rowHash: string;
 }
 
+/**
+ * Forward-looking demand for a SKU in a future period. Forecasts are their
+ * own canonical domain: they are never folded into sales history, and they
+ * stay distinct from Scenario Planning assumptions.
+ */
+export interface CanonicalForecast {
+  sku: string;
+  periodMonth: string; // ISO date, first of month
+  baselineQty: number;
+  lowQty?: number | null;
+  highQty?: number | null;
+  method?: string | null;
+  location: string;
+  sourceRef?: string | null;
+  /** Deterministic fingerprint (SKU, period, location) for re-import detection. */
+  rowHash: string;
+}
+
 /** A complete ingestion payload produced by any connector. */
 export interface CanonicalDataset {
   suppliers: CanonicalSupplier[];
@@ -131,6 +149,7 @@ export interface CanonicalDataset {
   channels?: CanonicalChannel[];
   transactions?: CanonicalTransaction[];
   purchaseOrders?: CanonicalPurchaseOrder[];
+  forecasts?: CanonicalForecast[];
 }
 
 /** A stock position at a single physical location. */
