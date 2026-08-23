@@ -683,7 +683,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
     }
     const batch = await getImportBatch(supabase, orgId, data.batchId);
     if (!batch) throw new Error("Import not found in this workspace.");
-    if (batch.status === "deleted") return { ok: true, already: true };
+    if (batch.status === "deleted") return { ok: true, already: true, transactions: 0, purchaseOrders: 0 };
     if (batch.status !== "inactive") {
       throw new Error("Deactivate the import before deleting it permanently.");
     }
@@ -701,7 +701,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
       purchase_orders_removed: removed.purchaseOrders,
       evaluated: run.evaluated,
     });
-    return { ok: true, ...removed };
+    return { ok: true, already: false, ...removed };
   });
 
 /**

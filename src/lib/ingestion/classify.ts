@@ -190,14 +190,17 @@ interface EntityScore {
   missingRequired: string[];
 }
 
-/** Header evidence: 3 = exact canonical or alias, 1.5 = containment of a long alias. */
+/** Header evidence: 3 = exact canonical or alias, 1.5 = containment. Reverse
+ *  containment (alias contains the header) requires a 5+ char header so bare
+ *  "code"/"name"/"qty" never auto-map to a specific field. */
 function headerScore(field: string, col: ColumnProfile): number {
   if (col.key === "") return 0;
   if (col.key === field) return 3;
   const aliases = aliasList(field);
   if (aliases.includes(col.key)) return 3;
   for (const alias of aliases) {
-    if (alias.length >= 4 && (col.key.includes(alias) || alias.includes(col.key))) return 1.5;
+    if (alias.length >= 4 && col.key.includes(alias)) return 1.5;
+    if (col.key.length >= 5 && alias.includes(col.key)) return 1.5;
   }
   return 0;
 }
@@ -426,8 +429,8 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     const txKeys = new Set<string>();
     for (const tx of txSheets) {
       const entry = byName.get(tx.sheetName)!;
-      const skuCol = tx.mapping.sku;
-      const dateCol = tx.mapping.transaction_date;
+      const skuCol = tx.mapping["sku"];
+      const dateCol = tx.mapping["transaction_date"];
       if (skuCol == null || dateCol == null) continue;
       for (const row of entry.sheet.rows.slice(0, 10_000)) {
         const iso = parseDate(cell(row, dateCol));
@@ -437,8 +440,8 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     }
     for (const m of monthlySheets) {
       const entry = byName.get(m.sheetName)!;
-      const skuCol = m.mapping.sku;
-      const monthCol = m.mapping.month;
+      const skuCol = m.mapping["sku"];
+      const monthCol = m.mapping["month"];
       if (skuCol == null || monthCol == null) continue;
       const keys = new Set<string>();
       for (const row of entry.sheet.rows.slice(0, 10_000)) {
@@ -465,11 +468,11 @@ export function classifyWorkbook(sheets: SheetTable[]): WorkbookAnalysis {
     if (r.duplicateSource) continue;
     entityTotals.set(r.kind, (entityTotals.get(r.kind) ?? 0) + r.rowCount);
     const entry = byName.get(r.sheetName)!;
-    if (r.kind === "sales_monthly" && r.mapping.month != null) {
-      for (const m of monthSetOf(entry.sheet, r.mapping.month, null)) months.add(m);
+    if (r.kind === "sales_monthly" && r.mapping["month"] != null) {
+      for (const m of monthSetOf(entry.sheet, r.mapping["month"]!, null)) months.add(m);
     }
-    if (r.kind === "transactions" && r.mapping.transaction_date != null) {
-      for (const m of monthSetOf(entry.sheet, -1, r.mapping.transaction_date)) months.add(m);
+    if (r.kind === "transactions" && r.mapping["transaction_date"] != null) {
+      for (const m of monthSetOf(entry.sheet, -1, r.mapping["transaction_date"]!)) months.add(m);
     }
   }
 

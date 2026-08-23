@@ -643,6 +643,11 @@ export async function setImportBatchStatus(
   return (data ?? []).length > 0;
 }
 
+/** First-of-month date for a YYYY-MM-DD day — the `sales.period_month` convention. */
+function monthKey(day: string): string {
+  return `${day.slice(0, 7)}-01`;
+}
+
 /** Distinct products and months a batch's transactions touched — the aggregate
  *  cells that must be rebuilt when the batch is (de)activated or deleted. */
 export async function batchDemandFootprint(

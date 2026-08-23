@@ -53,8 +53,12 @@ export function looksLikeNumber(value: string): boolean {
   const t = value.trim();
   if (!/[0-9]/.test(t)) return false;
   const negated = /^\((.*)\)$/.exec(t);
-  const body = (negated ? negated[1]! : t).replace(/[^0-9eE+\-.]/g, "");
+  const inner = negated ? negated[1]! : t;
+  const body = inner.replace(/[^0-9eE+\-.]/g, "");
   if (body === "" || body === "-" || body === ".") return false;
+  // Stripping must preserve most of the cell: "SKU-0001" leaving "0001"
+  // behind is an identifier, not a number.
+  if (body.length / inner.trim().length < 0.7) return false;
   return Number.isFinite(Number(body));
 }
 
