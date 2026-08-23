@@ -14,17 +14,28 @@ import {
 } from "@/components/ui/select";
 import { importUpload, inspectUpload } from "@/lib/ionic.functions";
 import {
-  ENTITY_DEFINITIONS,
   FIELD_ALIASES,
+  IMPORTABLE_KINDS,
   definitionFor,
   type ColumnMapping,
   type EntityKind,
 } from "@/lib/ingestion/mapping";
 import { num } from "@/lib/format";
 
-type Role = "master" | "transactional" | "aggregate" | "snapshot" | "mixed" | "contextual" | "unknown";
+type Role =
+  | "master"
+  | "transactional"
+  | "aggregate"
+  | "snapshot"
+  | "mixed"
+  | "forecast"
+  | "policy"
+  | "movement"
+  | "documentation"
+  | "contextual"
+  | "unknown";
 type Confidence = "high" | "medium" | "low" | "unresolved";
-type Disposition = "auto" | "review" | "blocked" | "ignored";
+type Disposition = "auto" | "review" | "blocked" | "unsupported" | "ignored";
 
 interface SheetPreview {
   sheetName: string;
@@ -43,15 +54,33 @@ interface SheetPreview {
   relationships: string[];
   missingRequired: string[];
   duplicateSource: string | null;
+  grain: string;
+  grainKey: string;
+  timeOrientation: "historical" | "current_state" | "forward" | "policy" | "not_dated";
+}
+
+/** A planning-policy value Ionic recognised in the workbook, awaiting a decision. */
+interface PolicyProposal {
+  sheet: string;
+  field: string;
+  label: string;
+  rawValue: string;
+  proposed: number | boolean | null;
+  unit: string | null;
+  scope: "organisation" | "specific";
+  scopeRef: string | null;
+  status: "ready" | "review";
+  reason: string;
 }
 
 interface Inspection {
   format: "csv" | "xlsx";
   filename: string;
   sheets: SheetPreview[];
-  summary: { total: number; auto: number; review: number; blocked: number; ignored: number };
+  summary: { total: number; auto: number; review: number; blocked: number; unsupported: number; ignored: number };
   entities: { kind: EntityKind; label: string; records: number }[];
   demandMonths: number;
+  policyProposals: PolicyProposal[];
 }
 
 interface SheetChoice {
@@ -77,6 +106,9 @@ interface ImportOutcome {
     unknownSkus: string[];
     unknownSuppliers: string[];
   };
+  forecasts?: { inserted: number; duplicates: number; unknownSkus: string[] };
+  policyApplied?: string[];
+  policySkipped?: string[];
   evaluated: number;
 }
 
@@ -88,8 +120,20 @@ const ROLE_LABEL: Record<Role, string> = {
   aggregate: "Monthly totals",
   snapshot: "Stock snapshot",
   mixed: "Mixed",
+  forecast: "Forward demand",
+  policy: "Planning parameters",
+  movement: "Stock movement",
+  documentation: "Notes",
   contextual: "Reference",
   unknown: "Unknown",
+};
+
+const ORIENTATION_LABEL: Record<SheetPreview["timeOrientation"], string> = {
+  historical: "historical",
+  current_state: "current state",
+  forward: "forward-looking",
+  policy: "policy",
+  not_dated: "undated",
 };
 
 function fileToPayload(file: File): Promise<{ encoding: "text" | "base64"; content: string }> {
@@ -123,6 +167,7 @@ export function ImportWizard() {
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [choices, setChoices] = useState<Record<string, SheetChoice>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [policyDecisions, setPolicyDecisions] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<"inspect" | "import" | null>(null);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
 
@@ -132,6 +177,7 @@ export function ImportWizard() {
     setInspection(null);
     setChoices({});
     setExpanded({});
+    setPolicyDecisions({});
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -169,6 +215,16 @@ export function ImportWizard() {
       // Auto-approved sheets stay collapsed; review/blocked open for inspection.
       setExpanded(
         Object.fromEntries(result.sheets.map((s) => [s.sheetName, s.disposition !== "auto"])),
+      );
+      // Policy proposals: clear organisation-wide values start accepted;
+      // anything ambiguous or item-specific starts as "keep existing".
+      setPolicyDecisions(
+        Object.fromEntries(
+          (result.policyProposals ?? []).map((p) => [
+            `${p.sheet}|${p.field}`,
+            p.status === "ready" && p.scope === "organisation",
+          ]),
+        ),
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "The file could not be read.");
@@ -246,6 +302,11 @@ export function ImportWizard() {
             kind: choices[s.sheetName]?.kind ?? "ignored",
             mapping: choices[s.sheetName]?.mapping ?? {},
           })),
+          policyDecisions: (inspection.policyProposals ?? []).map((p) => ({
+            sheet: p.sheet,
+            field: p.field,
+            accepted: policyDecisions[`${p.sheet}|${p.field}`] ?? false,
+          })),
         },
       })) as unknown as ImportOutcome;
       setOutcome(result);
@@ -275,8 +336,18 @@ export function ImportWizard() {
           title: "Needs review",
           sheets: inspection.sheets.filter(
             (s) =>
-              (s.disposition === "review" || s.disposition === "blocked") ||
-              (s.disposition === "auto" && (choices[s.sheetName]?.kind ?? "ignored") === "ignored"),
+              s.disposition === "review" ||
+              s.disposition === "blocked" ||
+              (s.disposition === "auto" && (choices[s.sheetName]?.kind ?? "ignored") === "ignored") ||
+              (s.disposition === "unsupported" && (choices[s.sheetName]?.kind ?? "ignored") !== "ignored"),
+          ),
+        },
+        {
+          key: "unsupported",
+          title: "Recognised, not stored",
+          sheets: inspection.sheets.filter(
+            (s) =>
+              s.disposition === "unsupported" && (choices[s.sheetName]?.kind ?? "ignored") === "ignored",
           ),
         },
         {
@@ -360,8 +431,69 @@ export function ImportWizard() {
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>{inspection.summary.auto} sheet{inspection.summary.auto === 1 ? "" : "s"} pre-approved</span>
             <span>{inspection.summary.review + inspection.summary.blocked} need review</span>
+            {inspection.summary.unsupported > 0 ? (
+              <span>{inspection.summary.unsupported} recognised, not stored</span>
+            ) : null}
             <span>{inspection.summary.ignored} excluded</span>
           </div>
+        </section>
+      ) : null}
+
+      {inspection && inspection.policyProposals.length > 0 ? (
+        <section className="panel p-5">
+          <h3 className="text-sm font-semibold">Planning parameters found in this file</h3>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Ionic recognised planning policy values in the workbook. Accept a value to update the
+            workspace planning policy, or keep what is already configured. Ranges and item-specific
+            values are never applied automatically.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {inspection.policyProposals.map((p) => {
+              const key = `${p.sheet}|${p.field}`;
+              const accepted = policyDecisions[key] ?? false;
+              const applicable = p.scope === "organisation" && p.proposed !== null;
+              return (
+                <li
+                  key={key}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium">
+                      {p.label}
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        workbook says: {p.rawValue}
+                        {p.unit ? ` ${p.unit}` : ""}
+                        {p.scope === "specific" ? ` · for ${p.scopeRef}` : ""}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{p.reason}</p>
+                  </div>
+                  {applicable ? (
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant={accepted ? "default" : "outline"}
+                        className="h-7 text-xs"
+                        onClick={() => setPolicyDecisions((prev) => ({ ...prev, [key]: true }))}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={accepted ? "outline" : "default"}
+                        className="h-7 text-xs"
+                        onClick={() => setPolicyDecisions((prev) => ({ ...prev, [key]: false }))}
+                      >
+                        Keep existing
+                      </Button>
+                    </div>
+                  ) : (
+                    <Pill tone="watch">Review only</Pill>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
 
@@ -448,6 +580,24 @@ export function ImportWizard() {
                 : ""}
             </p>
           ) : null}
+          {(outcome.forecasts?.inserted ?? 0) > 0 ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {num(outcome.forecasts!.inserted)} forward demand records stored
+              {outcome.forecasts!.duplicates
+                ? ` · ${num(outcome.forecasts!.duplicates)} already imported previously and skipped`
+                : ""}
+            </p>
+          ) : null}
+          {(outcome.policyApplied?.length ?? 0) > 0 ? (
+            <p className="mt-1.5 text-xs text-status-hold">
+              Planning policy updated: {outcome.policyApplied!.join(", ")}.
+            </p>
+          ) : null}
+          {(outcome.policySkipped?.length ?? 0) > 0 ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Not applied (item-specific or ambiguous): {outcome.policySkipped!.join(", ")}.
+            </p>
+          ) : null}
           {outcome.issues.length ? (
             <div className="mt-4 max-h-72 overflow-y-auto rounded-md border border-border">
               <table className="w-full text-xs">
@@ -531,9 +681,16 @@ function SheetCard({
             ? definitionFor(choice.kind)?.label ?? choice.kind
             : sheet.disposition === "ignored"
               ? "Excluded"
-              : "Not included"}
+              : sheet.disposition === "unsupported"
+                ? "Recognised, not stored"
+                : "Not included"}
         </Pill>
-        <span className="text-[11px] text-muted-foreground">{ROLE_LABEL[sheet.role]}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {ROLE_LABEL[sheet.role]}
+          {sheet.timeOrientation !== "not_dated" && sheet.timeOrientation !== "policy"
+            ? ` · ${ORIENTATION_LABEL[sheet.timeOrientation]}`
+            : ""}
+        </span>
         {suggestionAvailable ? (
           <Button size="sm" variant="outline" className="ml-auto h-7 text-xs" onClick={onAccept}>
             <Check className="size-3.5" />
@@ -547,9 +704,9 @@ function SheetCard({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ignored">Do not import</SelectItem>
-                {ENTITY_DEFINITIONS.map((d) => (
-                  <SelectItem key={d.kind} value={d.kind}>
-                    {d.label}
+                {IMPORTABLE_KINDS.map((kind) => (
+                  <SelectItem key={kind} value={kind}>
+                    {definitionFor(kind)?.label ?? kind}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -562,6 +719,9 @@ function SheetCard({
         <>
           <div className="space-y-1.5 border-t border-border px-4 py-3">
             <p className="text-xs text-muted-foreground">{sheet.reason}</p>
+            <p className="text-[11px] text-muted-foreground">
+              Row grain: {sheet.grainKey}
+            </p>
             {sheet.fieldReasons.length ? (
               <ul className="space-y-0.5 text-xs text-muted-foreground">
                 {sheet.fieldReasons.map((r) => (

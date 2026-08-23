@@ -3,6 +3,12 @@ import type { SheetTable } from "./sheet-table";
 /**
  * What a sheet is understood to contain. Detection is a suggestion only —
  * the user always confirms before anything is written.
+ *
+ * Kinds fall into three families:
+ * - importable: rows flow into the canonical model (products, inventory, …)
+ * - policy: parameter/value sheets, consumed through policy proposals only
+ * - surface-only: recognised domains Ionic cannot store yet (movements,
+ *   documentation) — reported, never silently dropped, never written.
  */
 export type EntityKind =
   | "combined"
@@ -14,6 +20,10 @@ export type EntityKind =
   | "customers"
   | "channels"
   | "purchase_orders"
+  | "demand_forecast"
+  | "inventory_movement"
+  | "planning_policy"
+  | "documentation"
   | "ignored";
 
 export interface EntityDefinition {
@@ -24,12 +34,14 @@ export interface EntityDefinition {
   required: string[];
   /** Canonical fields the sheet may also provide. */
   optional: string[];
+  /** Kinds that never persist rows through the sheet plan path. */
+  surfaceOnly?: boolean;
 }
 
 /** Alternative column names accepted from other systems, per canonical field. */
 export const FIELD_ALIASES: Record<string, string[]> = {
-  sku: ["sku", "item_code", "item", "product_code", "material", "material_number", "part_number", "product_sku", "stock_code", "item_no", "product_id", "item_number", "stock_keeping_unit"],
-  product_name: ["product_name", "name", "description", "product", "item_name", "item_description", "desc", "product_description", "item_desc"],
+  sku: ["sku", "item_code", "item", "product_code", "material", "material_number", "part_number", "product_sku", "stock_code", "item_no", "product_id", "item_number", "stock_keeping_unit", "material_code", "article", "article_no", "article_number"],
+  product_name: ["product_name", "name", "description", "product", "item_name", "item_description", "desc", "product_description", "item_desc", "material_description", "material_desc"],
   category: ["category", "product_group", "family", "product_category", "group", "department", "dept", "class", "product_class"],
   unit_cost: ["unit_cost", "cost", "standard_cost", "cost_price", "buy_price", "purchase_price", "unit_purchase_price"],
   unit_price: ["unit_price", "selling_price", "sell_price", "list_price", "price", "retail_price"],
@@ -39,19 +51,19 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   moq: ["moq", "min_order_qty", "minimum_order_quantity", "min_qty", "minimum_order_qty", "min_order_quantity", "order_minimum"],
   reliability: ["reliability", "otif", "on_time_rate", "service_rate", "fill_rate"],
   safety_stock_days: ["safety_stock_days", "safety_days", "buffer_days"],
-  on_hand: ["on_hand", "qty_on_hand", "stock", "quantity_on_hand", "inventory", "closing_stock", "stock_on_hand", "available_qty", "current_stock", "soh", "onhand"],
+  on_hand: ["on_hand", "qty_on_hand", "stock", "quantity_on_hand", "inventory", "closing_stock", "stock_on_hand", "available_qty", "current_stock", "soh", "onhand", "closing_balance", "stock_balance", "stock_qty", "inventory_qty", "balance_qty", "closing_qty", "qty_in_stock", "stock_level", "on_hand_qty"],
   on_order: ["on_order", "qty_on_order", "incoming", "open_po_qty", "open_order_qty", "on_po", "inbound_qty"],
-  as_of: ["as_of", "as_of_date", "stock_date", "snapshot_date", "count_date"],
-  location: ["location", "warehouse", "site", "store", "branch", "depot", "warehouse_code", "loc", "facility", "dc", "location_code"],
+  as_of: ["as_of", "as_of_date", "stock_date", "snapshot_date", "count_date", "as_at", "as_at_date", "balance_date", "position_date", "effective_date"],
+  location: ["location", "warehouse", "site", "store", "branch", "depot", "warehouse_code", "loc", "facility", "dc", "location_code", "storage_location", "plant", "warehouse_name"],
   region: ["region", "zone", "territory", "sales_region"],
   state_province: ["state", "province", "state_province", "county"],
   country: ["country", "country_code", "country_name"],
-  month: ["month", "period", "sales_month", "period_month", "yyyy_mm", "month_year", "fiscal_period"],
-  units_sold: ["units_sold", "qty_sold", "sales_qty", "demand", "quantity_sold", "sales_units", "units"],
-  revenue: ["revenue", "sales_value", "net_sales", "turnover", "amount", "value", "line_total", "net_revenue", "sales_amount", "ext_price", "line_value", "net_amount"],
+  month: ["month", "sales_month", "period_month", "yyyy_mm", "month_year", "fiscal_period", "period"],
+  units_sold: ["units_sold", "qty_sold", "sales_qty", "quantity_sold", "sales_units", "sold_qty"],
+  revenue: ["revenue", "sales_value", "net_sales", "turnover", "amount", "value", "line_total", "net_revenue", "sales_amount", "ext_price", "line_value", "net_amount", "net_value"],
   cogs: ["cogs", "cost_of_goods", "cost_of_sales", "total_cost", "cost_amount"],
-  transaction_date: ["date", "transaction_date", "order_date", "invoice_date", "posting_date", "document_date", "sales_date", "txn_date", "day", "invoice_dt", "doc_date"],
-  quantity: ["quantity", "qty", "units", "qty_sold", "units_sold", "demand", "order_qty", "qty_ordered", "ordered_qty"],
+  transaction_date: ["date", "transaction_date", "order_date", "invoice_date", "posting_date", "document_date", "sales_date", "txn_date", "day", "invoice_dt", "doc_date", "movement_date", "transaction_dt"],
+  quantity: ["quantity", "qty", "units", "units_sold", "order_qty", "qty_ordered", "ordered_qty", "qty_sold"],
   customer_ref: ["customer_id", "customer_code", "customer_ref", "account_number", "account_code", "cust_no", "cust_code", "sold_to", "ship_to", "account"],
   customer_name: ["customer_name", "customer", "account_name", "client", "buyer", "client_name", "customer_desc"],
   segment: ["segment", "customer_segment", "tier", "customer_type", "customer_group"],
@@ -59,15 +71,35 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   channel_name: ["channel_name", "channel", "sales_channel", "route_to_market", "channel_description", "channel_desc"],
   currency_code: ["currency", "currency_code", "ccy", "curr", "currency_cd"],
   original_amount: ["original_amount", "amount_original", "document_amount", "local_amount", "doc_amount"],
-  source_ref: ["source_ref", "document_no", "document_number", "invoice_no", "invoice_number", "order_no", "order_number", "line_id", "transaction_id", "doc_no", "inv_no", "receipt_no"],
+  source_ref: ["source_ref", "document_no", "document_number", "invoice_no", "invoice_number", "order_no", "order_number", "line_id", "transaction_id", "doc_no", "inv_no", "receipt_no", "reference", "ref_no"],
   po_ref: ["po_number", "po_no", "po_ref", "purchase_order", "purchase_order_number", "po_id", "po", "po_num", "po_nbr"],
   po_status: ["po_status", "status", "order_status", "state", "po_state"],
   approval_status: ["approval_status", "approval", "approval_state", "approved"],
-  ordered_at: ["ordered_at", "po_date", "placed_date", "date_ordered", "created_date", "raised_date", "order_date", "issue_date", "po_created"],
-  expected_at: ["expected_at", "eta", "expected_date", "expected_delivery", "delivery_date", "due_date", "promised_date", "arrival_date", "delivery_due", "req_date", "need_by", "requested_date"],
+  ordered_at: ["ordered_at", "po_date", "placed_date", "date_ordered", "created_date", "raised_date", "issue_date", "po_created"],
+  expected_at: ["expected_at", "eta", "expected_date", "expected_delivery", "delivery_date", "due_date", "promised_date", "arrival_date", "delivery_due", "req_date", "need_by", "requested_date", "required_date"],
   received_quantity: ["received_quantity", "received_qty", "qty_received", "quantity_received", "grn_qty"],
   received_at: ["received_at", "received_date", "actual_delivery", "actual_delivery_date", "goods_received_date", "delivered_date", "grn_date"],
   buyer: ["buyer", "planner", "purchaser", "buyer_name", "ordered_by", "purchased_by", "agent", "buyer_code"],
+
+  // Forward demand / forecast
+  forecast_period: ["forecast_period", "plan_period", "forecast_month", "planning_period", "fcst_period", "projection_period", "period", "month", "fcst_month", "plan_month", "forecast_date"],
+  baseline_qty: ["baseline", "baseline_units", "baseline_qty", "base_qty", "plan_qty", "planned_qty", "forecast_qty", "forecast_units", "fcst_qty", "expected_units", "base_case", "baseline_demand", "forecast", "demand_forecast", "plan_units", "planned_units", "baseline_units_fcst"],
+  low_qty: ["low", "low_case", "low_scenario", "low_qty", "pessimistic", "downside", "low_estimate", "lower_bound", "low_units", "minimum_case"],
+  high_qty: ["high", "high_case", "high_scenario", "high_qty", "optimistic", "upside", "high_estimate", "upper_bound", "high_units", "maximum_case"],
+  forecast_method: ["forecast_method", "method", "model", "forecast_model", "technique", "forecast_technique"],
+
+  // Inventory movements / consumption (surface-only domain)
+  movement_qty: ["movement_qty", "qty_change", "adjustment_qty", "consumed_qty", "consumption", "usage_qty", "issued_qty", "movement_quantity", "delta_qty", "qty_adjustment", "consumed", "usage", "issue_qty", "withdrawal_qty"],
+  movement_type: ["movement_type", "transaction_type", "movement_reason", "adjustment_type", "txn_type", "movement_code", "reason_code"],
+
+  // Planning policy / parameter sheets
+  parameter: ["parameter", "setting", "policy_parameter", "assumption", "planning_parameter", "config", "configuration", "parameter_name", "policy_name", "input"],
+  param_value: ["value", "setting_value", "parameter_value", "val", "current_value", "policy_value", "assumption_value"],
+  param_unit: ["unit", "uom", "unit_of_measure", "measure", "units_of_measure"],
+
+  // Documentation / metadata sheets
+  doc_section: ["section", "topic", "title", "subject", "area", "heading", "sheet", "table", "field", "dataset"],
+  doc_text: ["notes", "content", "definition", "detail", "details", "explanation", "note", "comment", "comments"],
 };
 
 export const ENTITY_DEFINITIONS: EntityDefinition[] = [
@@ -149,7 +181,46 @@ export const ENTITY_DEFINITIONS: EntityDefinition[] = [
       "buyer",
     ],
   },
+  {
+    kind: "demand_forecast",
+    label: "Demand forecast",
+    description:
+      "Forward-looking demand: one row per SKU and future period, with a baseline and optional low/high scenarios. Stored as forecast data, never mixed into sales history.",
+    required: ["sku", "forecast_period", "baseline_qty"],
+    optional: ["low_qty", "high_qty", "forecast_method", "location", "source_ref"],
+  },
+  {
+    kind: "inventory_movement",
+    label: "Inventory movements",
+    description:
+      "Non-sales stock movements such as consumption, adjustments and issues. Ionic recognises this data but cannot store it yet — it is reported, not imported.",
+    required: ["sku", "transaction_date", "movement_qty"],
+    optional: ["movement_type", "location", "source_ref"],
+    surfaceOnly: true,
+  },
+  {
+    kind: "planning_policy",
+    label: "Planning parameters",
+    description:
+      "Planning assumptions and policy values (service level, horizon, safety stock…). Consumed as proposals against the workspace planning policy — never imported as rows.",
+    required: ["parameter", "param_value"],
+    optional: ["param_unit", "sku", "supplier_code", "location", "doc_text"],
+    surfaceOnly: true,
+  },
+  {
+    kind: "documentation",
+    label: "Notes & documentation",
+    description: "README sheets, data dictionaries and notes. Used as context, never imported as data.",
+    required: ["doc_text"],
+    optional: ["doc_section"],
+    surfaceOnly: true,
+  },
 ];
+
+/** Kinds a user may manually assign in the wizard (row-importable targets). */
+export const IMPORTABLE_KINDS: EntityKind[] = ENTITY_DEFINITIONS.filter((d) => !d.surfaceOnly).map(
+  (d) => d.kind,
+);
 
 export function definitionFor(kind: EntityKind): EntityDefinition | null {
   return ENTITY_DEFINITIONS.find((d) => d.kind === kind) ?? null;

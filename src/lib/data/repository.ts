@@ -4,6 +4,7 @@ import type {
   AuditDetailValue,
   AuditEvent,
   CanonicalDataset,
+  CanonicalForecast,
   CanonicalPurchaseOrder,
   ConnectorType,
   DataSource,
@@ -695,7 +696,7 @@ export async function deleteBatchRows(
   supabase: Db,
   orgId: string,
   batchId: string,
-): Promise<{ transactions: number; purchaseOrders: number }> {
+): Promise<{ transactions: number; purchaseOrders: number; forecasts: number }> {
   const tx = await supabase
     .from("sales_transactions")
     .delete()
@@ -710,7 +711,18 @@ export async function deleteBatchRows(
     .eq("import_batch_id", batchId)
     .select("id");
   if (po.error) throw new Error(po.error.message);
-  return { transactions: (tx.data ?? []).length, purchaseOrders: (po.data ?? []).length };
+  const fc = await supabase
+    .from("demand_forecasts")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("import_batch_id", batchId)
+    .select("id");
+  if (fc.error) throw new Error(fc.error.message);
+  return {
+    transactions: (tx.data ?? []).length,
+    purchaseOrders: (po.data ?? []).length,
+    forecasts: (fc.data ?? []).length,
+  };
 }
 
 type CustomerRow = Database["public"]["Tables"]["customers"]["Insert"];
@@ -1320,6 +1332,101 @@ export async function persistPurchaseOrders(
     duplicates,
     unknownSkus: [...unknownSkus],
     unknownSuppliers: [...unknownSuppliers],
+    unknownLocations: [...unknownLocations],
+  };
+}
+
+export interface ForecastPersistResult {
+  inserted: number;
+  duplicates: number;
+  unknownSkus: string[];
+  unknownLocations: string[];
+}
+
+/**
+ * Persists forward-demand rows with fingerprint-based re-import detection.
+ * Forecasts live in their own domain — they never touch sales history and are
+ * never read by the trailing-average engine. The fingerprint covers the
+ * forecast cell (SKU, period, location); a re-import of the same cell is
+ * skipped rather than duplicated.
+ */
+export async function persistForecasts(
+  supabase: Db,
+  orgId: string,
+  rows: CanonicalForecast[] | undefined,
+  batchId: string | null,
+): Promise<ForecastPersistResult> {
+  const empty: ForecastPersistResult = { inserted: 0, duplicates: 0, unknownSkus: [], unknownLocations: [] };
+  const forecasts = rows ?? [];
+  if (forecasts.length === 0) return empty;
+
+  const [{ data: products, error: pErr }, { data: locations, error: lErr }] = await Promise.all([
+    supabase.from("products").select("id, sku").eq("org_id", orgId),
+    supabase.from("locations").select("id, code").eq("org_id", orgId),
+  ]);
+  if (pErr) throw new Error(pErr.message);
+  if (lErr) throw new Error(lErr.message);
+  const productIdBySku = new Map((products ?? []).map((p) => [p.sku, p.id]));
+  const locationIdByCode = new Map((locations ?? []).map((l) => [l.code.toLowerCase(), l.id]));
+
+  const hashes = [...new Set(forecasts.map((f) => f.rowHash))];
+  const existing = new Set<string>();
+  for (const part of chunk(hashes, 500)) {
+    const { data, error } = await supabase
+      .from("demand_forecasts")
+      .select("source_row_hash")
+      .eq("org_id", orgId)
+      .in("source_row_hash", part);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) existing.add(row.source_row_hash);
+  }
+
+  const unknownSkus = new Set<string>();
+  const unknownLocations = new Set<string>();
+  const seen = new Set<string>();
+  let duplicates = 0;
+  const inserts: Database["public"]["Tables"]["demand_forecasts"]["Insert"][] = [];
+
+  for (const f of forecasts) {
+    const productId = productIdBySku.get(f.sku);
+    if (!productId) {
+      unknownSkus.add(f.sku);
+      continue;
+    }
+    if (existing.has(f.rowHash) || seen.has(f.rowHash)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(f.rowHash);
+    // Locations resolve against the location master; an unknown code is kept
+    // as a null link and reported rather than invented.
+    let locationId: string | null = locationIdByCode.get(f.location.toLowerCase()) ?? null;
+    if (f.location && !locationId && f.location.toUpperCase() !== "MAIN") {
+      unknownLocations.add(f.location);
+    }
+    inserts.push({
+      org_id: orgId,
+      product_id: productId,
+      period_month: f.periodMonth,
+      baseline_qty: f.baselineQty,
+      low_qty: f.lowQty ?? null,
+      high_qty: f.highQty ?? null,
+      method: f.method ?? null,
+      location_id: locationId,
+      source_ref: f.sourceRef ?? null,
+      source_row_hash: f.rowHash,
+      import_batch_id: batchId,
+    });
+  }
+
+  for (const part of chunk(inserts, 500)) {
+    const { error } = await supabase.from("demand_forecasts").insert(part);
+    if (error) throw new Error(error.message);
+  }
+  return {
+    inserted: inserts.length,
+    duplicates,
+    unknownSkus: [...unknownSkus],
     unknownLocations: [...unknownLocations],
   };
 }

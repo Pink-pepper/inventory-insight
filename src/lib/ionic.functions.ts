@@ -28,6 +28,7 @@ import {
   loadOpenSupply,
   loadSignals,
   persistDataset,
+  persistForecasts,
   persistPurchaseOrders,
   persistTransactions,
   rebuildMonthlyForProducts,
@@ -349,6 +350,7 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     // (audit trail) and soft-retired instead of hard-deleted.
     const tables = [
       "recommendations",
+      "demand_forecasts",
       "purchase_orders",
       "sales_transactions",
       "sales",
@@ -462,6 +464,10 @@ const ENTITY_KINDS = [
   "customers",
   "channels",
   "purchase_orders",
+  "demand_forecast",
+  "inventory_movement",
+  "planning_policy",
+  "documentation",
   "ignored",
 ] as const;
 
@@ -476,6 +482,19 @@ const importInput = uploadInput.extend({
     )
     .min(1)
     .max(30),
+  /** Which policy proposals the user accepted: (sheet, field) pairs only.
+   *  Values are never trusted from the client — they are re-derived from the
+   *  file on the server before anything is applied. */
+  policyDecisions: z
+    .array(
+      z.object({
+        sheet: z.string().min(1).max(200),
+        field: z.string().min(1).max(64),
+        accepted: z.boolean(),
+      }),
+    )
+    .max(50)
+    .optional(),
 });
 
 /** Sanitises a client-supplied filename down to a safe basename. */
@@ -530,14 +549,14 @@ export const importUpload = createServerFn({ method: "POST" })
   .inputValidator(importInput.parse)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { orgId } = await resolveOrg(supabase, userId);
+    const { orgId, role } = await resolveOrg(supabase, userId);
     const filename = safeFilename(data.filename);
     const payload = decodeUpload(data.encoding, data.content);
     const format = formatOf(filename, payload.bytes);
     const sheets = toSheets(format, payload);
 
     const plans: SheetPlan[] = data.plans.filter((p) => sheets.some((s) => s.sheetName === p.sheetName));
-    if (plans.every((p) => p.kind === "ignored")) {
+    if (plans.every((p) => p.kind === "ignored" || p.kind === "planning_policy" || p.kind === "documentation" || p.kind === "inventory_movement")) {
       throw new Error("No sheets were selected for import.");
     }
 
@@ -547,7 +566,8 @@ export const importUpload = createServerFn({ method: "POST" })
       result.dataset.inventory.length === 0 &&
       result.dataset.sales.length === 0 &&
       (result.dataset.transactions?.length ?? 0) === 0 &&
-      (result.dataset.purchaseOrders?.length ?? 0) === 0
+      (result.dataset.purchaseOrders?.length ?? 0) === 0 &&
+      (result.dataset.forecasts?.length ?? 0) === 0
     ) {
       throw new Error(
         result.issues.find((i) => i.severity === "error")?.message ??
@@ -572,6 +592,45 @@ export const importUpload = createServerFn({ method: "POST" })
     const counts = await persistDataset(supabase, orgId, result.dataset);
     const tx = await persistTransactions(supabase, orgId, result.dataset, batchId);
     const pos = await persistPurchaseOrders(supabase, orgId, result.dataset.purchaseOrders, batchId);
+    const fc = await persistForecasts(supabase, orgId, result.dataset.forecasts, batchId);
+
+    // Accepted policy proposals: the client sends (sheet, field) pairs only;
+    // the values are re-derived from the file itself before anything is
+    // applied. Organisation-scope, fully parsed proposals only — specific or
+    // ambiguous values are reported, never written.
+    const accepted = new Set(
+      (data.policyDecisions ?? []).filter((d) => d.accepted).map((d) => `${d.sheet}|${d.field}`),
+    );
+    const policyApplied: string[] = [];
+    const policySkipped: string[] = [];
+    if (accepted.size > 0) {
+      const inspection = inspectSheets(filename, format, sheets);
+      const plannedAs = new Map(plans.map((p) => [p.sheetName, p.kind]));
+      const patch: Record<string, number | boolean> = {};
+      for (const proposal of inspection.policyProposals) {
+        if (!accepted.has(`${proposal.sheet}|${proposal.field}`)) continue;
+        const sheetPlan = plannedAs.get(proposal.sheet);
+        if (sheetPlan !== "planning_policy" && sheetPlan !== "ignored") continue;
+        if (proposal.scope !== "organisation" || proposal.proposed == null) {
+          policySkipped.push(proposal.label);
+          continue;
+        }
+        patch[proposal.field] = proposal.proposed;
+        policyApplied.push(proposal.label);
+      }
+      if (policyApplied.length > 0) {
+        if (role !== "owner" && role !== "admin") {
+          throw new Error("Only workspace owners and admins can change the planning policy.");
+        }
+        const current = await getEffectivePolicy(supabase, orgId);
+        await savePlanningPolicy(supabase, orgId, { ...current, ...patch });
+        await audit(supabase, orgId, userId, "planning.policy.updated", {
+          source: "import",
+          filename,
+          applied: policyApplied.join(", "),
+        });
+      }
+    }
 
     const { error: dsError } = await supabase.from("data_sources").insert({
       org_id: orgId,
@@ -598,6 +657,9 @@ export const importUpload = createServerFn({ method: "POST" })
       purchase_orders_updated: pos.updated,
       po_duplicates: pos.duplicates,
       po_unknown_locations: pos.unknownLocations.length,
+      forecasts: fc.inserted,
+      forecast_duplicates: fc.duplicates,
+      policy_applied: policyApplied.join(", "),
     });
     await audit(supabase, orgId, userId, "recommendations.generated", {
       evaluated: run.evaluated,
@@ -610,6 +672,9 @@ export const importUpload = createServerFn({ method: "POST" })
       ...counts,
       transactions: tx,
       purchaseOrders: pos,
+      forecasts: fc,
+      policyApplied,
+      policySkipped,
       issues: result.issues,
       stats: result.stats,
       evaluated: run.evaluated,
@@ -699,6 +764,7 @@ export const deleteImportBatch = createServerFn({ method: "POST" })
       filename: batch.filename,
       transactions_removed: removed.transactions,
       purchase_orders_removed: removed.purchaseOrders,
+      forecasts_removed: removed.forecasts,
       evaluated: run.evaluated,
     });
     return { ok: true, already: false, ...removed };

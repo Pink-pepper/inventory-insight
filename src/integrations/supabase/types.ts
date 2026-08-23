@@ -160,6 +160,83 @@ export type Database = {
           },
         ]
       }
+      demand_forecasts: {
+        Row: {
+          baseline_qty: number
+          created_at: string
+          high_qty: number | null
+          id: string
+          import_batch_id: string | null
+          location_id: string | null
+          low_qty: number | null
+          method: string | null
+          org_id: string
+          period_month: string
+          product_id: string
+          source_ref: string | null
+          source_row_hash: string
+        }
+        Insert: {
+          baseline_qty: number
+          created_at?: string
+          high_qty?: number | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          low_qty?: number | null
+          method?: string | null
+          org_id: string
+          period_month: string
+          product_id: string
+          source_ref?: string | null
+          source_row_hash: string
+        }
+        Update: {
+          baseline_qty?: number
+          created_at?: string
+          high_qty?: number | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          low_qty?: number | null
+          method?: string | null
+          org_id?: string
+          period_month?: string
+          product_id?: string
+          source_ref?: string | null
+          source_row_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demand_forecasts_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "demand_forecasts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demand_forecasts_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "demand_forecasts_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
       import_batches: {
         Row: {
           created_at: string

@@ -8,6 +8,8 @@ import {
   type Disposition,
   type MappingConfidence,
 } from "./classify";
+import type { Grain, TimeOrientation } from "./grain";
+import { extractPolicyProposals, type PolicyProposal } from "./policy-detect";
 
 export type UploadFormat = "csv" | "xlsx";
 
@@ -24,7 +26,7 @@ export interface SheetPreview {
   /** What the data represents in planning terms. */
   role: DataRole;
   confidence: MappingConfidence;
-  /** auto: pre-approved · review: glance needed · blocked: columns missing · ignored: excluded. */
+  /** auto · review · blocked · unsupported (recognised, no destination) · ignored. */
   disposition: Disposition;
   /** Plain-language verdict. */
   reason: string;
@@ -35,16 +37,24 @@ export interface SheetPreview {
   missingRequired: string[];
   /** Set when a richer sheet covers the same data. */
   duplicateSource: string | null;
+  /** What one row represents ("one row per SKU and month"). */
+  grain: Grain;
+  grainKey: string;
+  /** Historical, current-state, forward-looking or policy data. */
+  timeOrientation: TimeOrientation;
 }
 
 export interface UploadInspection {
   format: UploadFormat;
   filename: string;
   sheets: SheetPreview[];
-  summary: { total: number; auto: number; review: number; blocked: number; ignored: number };
+  summary: { total: number; auto: number; review: number; blocked: number; unsupported: number; ignored: number };
   /** Business preview: what Ionic will understand from this file. */
   entities: { kind: EntityKind; label: string; records: number }[];
   demandMonths: number;
+  /** Planning-policy proposals mined from parameter sheets. Nothing is
+   *  applied until the user explicitly accepts a proposal at import time. */
+  policyProposals: PolicyProposal[];
 }
 
 const SAMPLE_ROWS = 10;
@@ -88,9 +98,15 @@ export function inspectSheets(filename: string, format: UploadFormat, sheets: Sh
       relationships: c.relationships,
       missingRequired: c.missingRequired,
       duplicateSource: c.duplicateSource,
+      grain: c.grain.grain,
+      grainKey: c.grain.key,
+      timeOrientation: c.timeOrientation,
     })),
     summary: analysis.summary,
     entities: analysis.entities,
     demandMonths: analysis.demandMonths,
+    policyProposals: analysis.sheets.flatMap((c, i) =>
+      c.kind === "planning_policy" ? extractPolicyProposals(bounded[i]!, c.mapping) : [],
+    ),
   };
 }
