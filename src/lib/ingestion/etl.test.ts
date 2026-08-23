@@ -86,8 +86,8 @@ describe("workbook classification", () => {
     const data = analysis.sheets.find((s) => s.sheetName === "Data")!;
     expect(data.kind).toBe("transactions");
     expect(data.role).toBe("transactional");
-    expect(data.mapping.transaction_date).toBe(1);
-    expect(data.mapping.quantity).toBe(4);
+    expect(data.mapping["transaction_date"]).toBe(1);
+    expect(data.mapping["quantity"]).toBe(4);
   });
 
   test("identifier columns are linked across sheets by value overlap", () => {
@@ -103,7 +103,7 @@ describe("workbook classification", () => {
     ]);
     const data = analysis.sheets.find((s) => s.sheetName === "Data")!;
     expect(data.kind).toBe("transactions");
-    expect(data.mapping.customer_ref).toBe(2);
+    expect(data.mapping["customer_ref"]).toBe(2);
     expect(data.relationships.length).toBeGreaterThan(0);
   });
 
