@@ -139,8 +139,8 @@ function RecommendationsPage() {
 
   return (
     <AppShell
-      title="Recommendations"
-      description="Rule-based purchasing actions derived from demand, lead time, safety stock and MOQ."
+      title="Analytics"
+      description="Explore demand, inventory and purchasing signals for every SKU — every figure comes from the same rule-based recommendation engine."
       actions={
         <Button variant="outline" size="sm" onClick={refresh} disabled={busy || isLoading}>
           {busy ? (

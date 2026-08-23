@@ -99,7 +99,7 @@ function DataSourcesPage() {
                 {busy === "demo" ? "Loading" : "Load demo data"}
               </Button>
               <Button asChild size="sm" variant="ghost">
-                <Link to="/overview">Open overview</Link>
+                <Link to="/overview">Open dashboard</Link>
               </Button>
             </div>
           </section>
