@@ -3,6 +3,7 @@ import { profileSheet } from "./profile";
 import { classifyWorkbook } from "./classify";
 import { parseDate, parseNumber } from "./validate";
 import { emptySheet, type SheetTable } from "./sheet-table";
+import { extractPolicyProposals } from "./policy-detect";
 
 function sheet(name: string, headers: string[], rows: string[][]): SheetTable {
   return { sheetName: name, headers, rows, rowCount: rows.length, truncated: false };
@@ -231,7 +232,15 @@ describe("generalised planning-data recognition", () => {
     const policy = analysis.sheets.find((s) => s.sheetName === "Parameters")!;
     expect(policy.kind).toBe("planning_policy");
     expect(policy.disposition).toBe("unsupported");
-    const lt = policy.proposals?.find((p) => p.field === "defaultLeadTimeDays");
+    const proposals = extractPolicyProposals(
+      sheet("Parameters", ["Parameter", "Value"], [
+        ["Lead time", "14 days"],
+        ["Safety stock", "10 days"],
+        ["Demand window", "6 months"],
+      ]),
+      policy.mapping,
+    );
+    const lt = proposals.find((p) => p.field === "defaultLeadTimeDays");
     expect(lt?.proposed).toBe(14);
     expect(lt?.scope).toBe("organisation");
   });
