@@ -190,14 +190,17 @@ interface EntityScore {
   missingRequired: string[];
 }
 
-/** Header evidence: 3 = exact canonical or alias, 1.5 = containment of a long alias. */
+/** Header evidence: 3 = exact canonical or alias, 1.5 = containment. Reverse
+ *  containment (alias contains the header) requires a 5+ char header so bare
+ *  "code"/"name"/"qty" never auto-map to a specific field. */
 function headerScore(field: string, col: ColumnProfile): number {
   if (col.key === "") return 0;
   if (col.key === field) return 3;
   const aliases = aliasList(field);
   if (aliases.includes(col.key)) return 3;
   for (const alias of aliases) {
-    if (alias.length >= 4 && (col.key.includes(alias) || alias.includes(col.key))) return 1.5;
+    if (alias.length >= 4 && col.key.includes(alias)) return 1.5;
+    if (col.key.length >= 5 && alias.includes(col.key)) return 1.5;
   }
   return 0;
 }

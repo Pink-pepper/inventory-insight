@@ -91,17 +91,19 @@ describe("workbook classification", () => {
   });
 
   test("identifier columns are linked across sheets by value overlap", () => {
+    // "Code" is not an alias for anything — only its values reveal it.
     const analysis = classifyWorkbook([
       sheet("Products", MASTER_HEADERS, MASTER_ROWS),
       sheet("Customers", CUSTOMER_HEADERS, CUSTOMER_ROWS),
-      sheet("Data", ["Ref", "When", "Amount"], [
-        ["CUS-001", "2026-08-01", "10"],
-        ["CUS-002", "2026-08-02", "20"],
-        ["CUS-003", "2026-08-03", "30"],
+      sheet("Data", ["Invoice No.", "Invoice Date", "Code", "SKU", "Quantity", "Line Value"], [
+        ["INV-1", "2026-08-01", "CUS-001", "SKU-0001", "10", "100"],
+        ["INV-2", "2026-08-02", "CUS-002", "SKU-0002", "20", "400"],
+        ["INV-3", "2026-08-03", "CUS-003", "SKU-0003", "30", "210"],
       ]),
     ]);
     const data = analysis.sheets.find((s) => s.sheetName === "Data")!;
-    expect(data.mapping.customer_ref).toBe(0);
+    expect(data.kind).toBe("transactions");
+    expect(data.mapping.customer_ref).toBe(2);
     expect(data.relationships.length).toBeGreaterThan(0);
   });
 
