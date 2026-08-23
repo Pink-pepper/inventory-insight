@@ -21,14 +21,14 @@ import { formatProductLabel } from "@/lib/domain/planning-policy";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/overview", label: "Overview", icon: LayoutDashboard },
-  { to: "/demand-planning", label: "Demand Planning", icon: TrendingUp },
+  { to: "/overview", label: "Dashboard", icon: LayoutDashboard },
   { to: "/inventory", label: "Inventory", icon: Boxes },
-  { to: "/supply-planning", label: "Supply Planning", icon: Truck },
+  { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
+  { to: "/supply-planning", label: "Supply Plan", icon: Truck },
+  { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
+  { to: "/scenarios", label: "Scenario", icon: FlaskConical },
+  { to: "/recommendations", label: "Analytics", icon: ClipboardList },
   { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
-  { to: "/scenarios", label: "Scenarios", icon: FlaskConical },
-  { to: "/purchasing", label: "Purchasing", icon: ShoppingCart },
-  { to: "/recommendations", label: "Recommendations", icon: ClipboardList },
   { to: "/data-sources", label: "Data Sources", icon: Database },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;

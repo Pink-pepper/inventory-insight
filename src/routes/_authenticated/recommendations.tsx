@@ -16,13 +16,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/recommendations")({
   head: () => ({
     meta: [
-      { title: "Purchasing recommendations — Ionic" },
+      { title: "Analytics — Ionic" },
       {
         name: "description",
         content:
           "SKU-level reorder, watch, hold and excess recommendations with quantities, costs and the reasoning behind each call.",
       },
-      { property: "og:title", content: "Purchasing recommendations — Ionic" },
+      { property: "og:title", content: "Analytics — Ionic" },
       {
         property: "og:description",
         content: "Reorder quantities, costs and reasoning for every SKU in the workspace.",
