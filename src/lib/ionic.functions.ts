@@ -647,17 +647,27 @@ export const listScenarios = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
-    return { scenarios: await listScenarioRecords(supabase, orgId) };
+    const [scenarios, facts, policy] = await Promise.all([
+      listScenarioRecords(supabase, orgId),
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+    ]);
+    return { scenarios, options: filterOptions(facts), policy };
   });
 
-/** One scenario plus its run history. */
+/** One scenario plus its run history and the dimensions available for scope. */
 export const getScenario = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { orgId } = await resolveOrg(supabase, userId);
-    return getScenarioRecord(supabase, orgId, data.scenarioId);
+    const [detail, facts, policy] = await Promise.all([
+      getScenarioRecord(supabase, orgId, data.scenarioId),
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+    ]);
+    return { ...detail, options: filterOptions(facts), policy };
   });
 
 /** Creates a scenario. Any workspace member may define one. */
