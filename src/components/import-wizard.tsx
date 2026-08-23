@@ -16,8 +16,10 @@ import { importUpload, inspectUpload } from "@/lib/ionic.functions";
 import {
   FIELD_ALIASES,
   IMPORTABLE_KINDS,
+  capabilityLabel,
   definitionFor,
   type ColumnMapping,
+  type EntityCapability,
   type EntityKind,
 } from "@/lib/ingestion/mapping";
 import { num } from "@/lib/format";
@@ -54,6 +56,8 @@ interface SheetPreview {
   relationships: string[];
   missingRequired: string[];
   duplicateSource: string | null;
+  assumption: string | null;
+  capability: EntityCapability | null;
   grain: string;
   grainKey: string;
   timeOrientation: "historical" | "current_state" | "forward" | "policy" | "not_dated";
@@ -107,6 +111,7 @@ interface ImportOutcome {
     unknownSuppliers: string[];
   };
   forecasts?: { inserted: number; duplicates: number; unknownSkus: string[] };
+  movements?: { inserted: number; duplicates: number; unknownSkus: string[] };
   policyApplied?: string[];
   policySkipped?: string[];
   evaluated: number;
@@ -585,6 +590,17 @@ export function ImportWizard() {
               {num(outcome.forecasts!.inserted)} forward demand records stored
               {outcome.forecasts!.duplicates
                 ? ` · ${num(outcome.forecasts!.duplicates)} already imported previously and skipped`
+                : ""}
+            </p>
+          ) : null}
+          {outcome.movements?.inserted || outcome.movements?.duplicates ? (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {num(outcome.movements!.inserted)} movement records stored (record only — not used by planning yet)
+              {outcome.movements!.duplicates
+                ? ` · ${num(outcome.movements!.duplicates)} already imported previously and skipped`
+                : ""}
+              {outcome.movements!.unknownSkus.length
+                ? ` · unknown SKUs skipped: ${outcome.movements!.unknownSkus.join(", ")}`
                 : ""}
             </p>
           ) : null}
