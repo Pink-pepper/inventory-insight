@@ -14,24 +14,56 @@ import {
   Settings,
   LogOut,
   Loader2,
+  BookOpen,
+  Handshake,
+  Users,
+  Radar,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getWorkspace } from "@/lib/ionic.functions";
 import { formatProductLabel } from "@/lib/domain/planning-policy";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { to: "/overview", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/inventory", label: "Inventory", icon: Boxes },
-  { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
-  { to: "/supply-planning", label: "Supply Plan", icon: Truck },
-  { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
-  { to: "/scenarios", label: "Scenario", icon: FlaskConical },
-  { to: "/recommendations", label: "Analytics", icon: ClipboardList },
-  { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
-  { to: "/data-sources", label: "Data Sources", icon: Database },
-  { to: "/settings", label: "Settings", icon: Settings },
+/**
+ * Navigation follows the distributor's working order: what the business has
+ * sold or is about to sell, then what that means for stock and supply.
+ */
+const NAV_GROUPS = [
+  {
+    label: null,
+    items: [{ to: "/overview", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Business",
+    items: [
+      { to: "/business", label: "Demand Book", icon: BookOpen },
+      { to: "/business/pipeline", label: "Pipeline", icon: Handshake },
+      { to: "/business/customers", label: "Customers", icon: Users },
+      { to: "/business/signals", label: "Market Signals", icon: Radar },
+    ],
+  },
+  {
+    label: "Planning",
+    items: [
+      { to: "/inventory", label: "Inventory", icon: Boxes },
+      { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
+      { to: "/supply-planning", label: "Supply Plan", icon: Truck },
+      { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
+      { to: "/scenarios", label: "Scenario", icon: FlaskConical },
+      { to: "/recommendations", label: "Analytics", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Supply & data",
+    items: [
+      { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
+      { to: "/data-sources", label: "Data Sources", icon: Database },
+      { to: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ] as const;
+
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 export function useWorkspace() {
   const fn = useServerFn(getWorkspace);
