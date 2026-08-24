@@ -281,4 +281,6 @@ export interface BusinessBook {
   quotations: QuotationRecord[];
   customerOrders: CustomerOrderRecord[];
   marketSignals: MarketSignalRecord[];
+  products: { id: string; sku: string; name: string }[];
+  suppliers: { id: string; name: string }[];
 }

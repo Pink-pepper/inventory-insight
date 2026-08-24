@@ -251,8 +251,39 @@ export async function listDemandSignals(
   }));
 }
 
+/** Minimal product and supplier pickers for the Business screens. */
+export async function listPickerProducts(supabase: Db, orgId: string) {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, sku, name")
+    .eq("org_id", orgId)
+    .order("sku");
+  fail(error);
+  return (data ?? []).map((r) => ({ id: r.id, sku: r.sku, name: r.name }));
+}
+
+export async function listPickerSuppliers(supabase: Db, orgId: string) {
+  const { data, error } = await supabase
+    .from("suppliers")
+    .select("id, name")
+    .eq("org_id", orgId)
+    .order("name");
+  fail(error);
+  return (data ?? []).map((r) => ({ id: r.id, name: r.name }));
+}
+
 export async function loadBusinessBook(supabase: Db, orgId: string): Promise<BusinessBook> {
-  const [customers, contacts, requirements, opportunities, quotations, customerOrders, marketSignals] =
+  const [
+    customers,
+    contacts,
+    requirements,
+    opportunities,
+    quotations,
+    customerOrders,
+    marketSignals,
+    products,
+    suppliers,
+  ] =
     await Promise.all([
       listCustomers(supabase, orgId),
       listContacts(supabase, orgId),
@@ -261,8 +292,20 @@ export async function loadBusinessBook(supabase: Db, orgId: string): Promise<Bus
       listQuotations(supabase, orgId),
       listCustomerOrders(supabase, orgId),
       listMarketSignals(supabase, orgId),
+      listPickerProducts(supabase, orgId),
+      listPickerSuppliers(supabase, orgId),
     ]);
-  return { customers, contacts, requirements, opportunities, quotations, customerOrders, marketSignals };
+  return {
+    customers,
+    contacts,
+    requirements,
+    opportunities,
+    quotations,
+    customerOrders,
+    marketSignals,
+    products,
+    suppliers,
+  };
 }
 
 /** Tables the generic commercial writer is allowed to touch. */
