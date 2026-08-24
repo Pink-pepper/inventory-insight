@@ -22,6 +22,7 @@ import { Route as AuthenticatedPurchasingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_authenticated/recommendations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSupplyPlanningRouteImport } from './routes/_authenticated/supply-planning'
+import { Route as AuthenticatedBusinessIndexRouteImport } from './routes/_authenticated/business.index'
 import { Route as AuthenticatedBusinessPipelineRouteImport } from './routes/_authenticated/business.pipeline'
 import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
@@ -96,6 +97,12 @@ const AuthenticatedSupplyPlanningRoute =
     path: '/supply-planning',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedBusinessIndexRoute =
+  AuthenticatedBusinessIndexRouteImport.update({
+    id: '/business/',
+    path: '/business/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBusinessPipelineRoute =
   AuthenticatedBusinessPipelineRouteImport.update({
     id: '/business/pipeline',
@@ -136,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/business/': typeof AuthenticatedBusinessIndexRoute
   '/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesByTo {
@@ -154,6 +162,7 @@ export interface FileRoutesByTo {
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/business': typeof AuthenticatedBusinessIndexRoute
   '/scenarios': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRoutesById {
@@ -174,6 +183,7 @@ export interface FileRoutesById {
   '/_authenticated/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
+  '/_authenticated/business/': typeof AuthenticatedBusinessIndexRoute
   '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
 }
 export interface FileRouteTypes {
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/business/pipeline'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
+    | '/business/'
     | '/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/business/pipeline'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
+    | '/business'
     | '/scenarios'
   id:
     | '__root__'
@@ -231,6 +243,7 @@ export interface FileRouteTypes {
     | '/_authenticated/business/pipeline'
     | '/_authenticated/scenarios/$scenarioId'
     | '/_authenticated/sku/$sku'
+    | '/_authenticated/business/'
     | '/_authenticated/scenarios/'
   fileRoutesById: FileRoutesById
 }
@@ -334,6 +347,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSupplyPlanningRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/business/': {
+      id: '/_authenticated/business/'
+      path: '/business'
+      fullPath: '/business/'
+      preLoaderRoute: typeof AuthenticatedBusinessIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/business/pipeline': {
       id: '/_authenticated/business/pipeline'
       path: '/business/pipeline'
@@ -378,6 +398,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBusinessPipelineRoute: typeof AuthenticatedBusinessPipelineRoute
   AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
+  AuthenticatedBusinessIndexRoute: typeof AuthenticatedBusinessIndexRoute
   AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
 }
 
@@ -394,6 +415,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBusinessPipelineRoute: AuthenticatedBusinessPipelineRoute,
   AuthenticatedScenariosScenarioIdRoute: AuthenticatedScenariosScenarioIdRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
+  AuthenticatedBusinessIndexRoute: AuthenticatedBusinessIndexRoute,
   AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
 }
 
