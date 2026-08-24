@@ -141,25 +141,36 @@ export function AppShell({
           </p>
         </div>
 
-        <nav className="flex-1 space-y-0.5 p-3">
-          {NAV.map((item) => {
-            const active = pathname === item.to || pathname.startsWith(item.to + "/");
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                )}
-              >
-                <item.icon className="size-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+          {NAV_GROUPS.map((group, i) => (
+            <div key={group.label ?? `group-${i}`} className="space-y-0.5">
+              {group.label ? (
+                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">
+                  {group.label}
+                </p>
+              ) : null}
+              {group.items.map((item) => {
+                const active =
+                  pathname === item.to ||
+                  (item.to !== "/business" && pathname.startsWith(item.to + "/"));
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                    )}
+                  >
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-sidebar-border p-3">
