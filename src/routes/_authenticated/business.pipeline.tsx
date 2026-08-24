@@ -263,7 +263,7 @@ function PipelinePage() {
                 {
                   label: "Commitment",
                   render: (c) => (
-                    <Pill tone={c.confirmation ? "positive" : "neutral"}>
+                    <Pill tone={c.confirmation ? "hold" : "neutral"}>
                       {c.confirmation ? "Confirmed" : "LPO"}
                     </Pill>
                   ),
