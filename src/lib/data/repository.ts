@@ -1061,7 +1061,10 @@ export interface OpenSupplyLine {
 async function loadShipmentAllocations(supabase: Db, orgId: string): Promise<ShipmentAllocation[]> {
   const { data, error } = await supabase
     .from("shipment_lines")
-    .select("purchase_order_id, quantity, shipments(id, reference, status, eta, revised_eta, arrived_on)")
+    // Two FKs reach shipments (id and the tenant-composite); name the one we mean.
+    .select(
+      "purchase_order_id, quantity, shipments!shipment_lines_shipment_id_fkey(id, reference, status, eta, revised_eta, arrived_on)",
+    )
     .eq("org_id", orgId)
     .not("purchase_order_id", "is", null);
   if (error) throw new Error(error.message);

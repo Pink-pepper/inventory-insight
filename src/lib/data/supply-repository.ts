@@ -36,7 +36,7 @@ export async function listSupplierProducts(
   const { data, error } = await supabase
     .from("supplier_products")
     .select(
-      "id, supplier_id, product_id, supplier_price, currency_code, min_order_qty, lead_time_days, is_active, notes, suppliers(id, name), products(id, sku, name)",
+      "id, supplier_id, product_id, supplier_price, currency_code, min_order_qty, lead_time_days, is_active, notes, suppliers!supplier_products_supplier_id_fkey(id, name), products!supplier_products_product_id_fkey(id, sku, name)",
     )
     .eq("org_id", orgId)
     .order("created_at", { ascending: false });
@@ -64,7 +64,7 @@ export async function listCostComponents(
   const { data, error } = await supabase
     .from("cost_components")
     .select(
-      "id, product_id, supplier_id, shipment_id, kind, label, amount, basis, currency_code, effective_from, notes, suppliers(id, name), products(id, sku, name), shipments(id, reference)",
+      "id, product_id, supplier_id, shipment_id, kind, label, amount, basis, currency_code, effective_from, notes, suppliers!cost_components_supplier_id_fkey(id, name), products!cost_components_product_id_fkey(id, sku, name), shipments!cost_components_shipment_id_fkey(id, reference)",
     )
     .eq("org_id", orgId)
     .order("created_at", { ascending: false });
@@ -94,14 +94,14 @@ export async function listShipments(supabase: Db, orgId: string): Promise<Shipme
     supabase
       .from("shipments")
       .select(
-        "id, supplier_id, location_id, reference, mode, status, etd, eta, revised_eta, arrived_on, cleared_on, delivered_on, incoterm, currency_code, fx_rate, notes, suppliers(id, name), locations(id, code)",
+        "id, supplier_id, location_id, reference, mode, status, etd, eta, revised_eta, arrived_on, cleared_on, delivered_on, incoterm, currency_code, fx_rate, notes, suppliers!shipments_supplier_id_fkey(id, name), locations!shipments_location_id_fkey(id, code)",
       )
       .eq("org_id", orgId)
       .order("eta", { ascending: true, nullsFirst: false }),
     supabase
       .from("shipment_lines")
       .select(
-        "id, shipment_id, purchase_order_id, product_id, quantity, unit_cost, notes, products(id, sku, name), purchase_orders(id, po_number)",
+        "id, shipment_id, purchase_order_id, product_id, quantity, unit_cost, notes, products!shipment_lines_product_id_fkey(id, sku, name), purchase_orders!shipment_lines_purchase_order_id_fkey(id, po_number)",
       )
       .eq("org_id", orgId),
   ]);
