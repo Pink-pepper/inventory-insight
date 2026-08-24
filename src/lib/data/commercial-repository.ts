@@ -396,14 +396,26 @@ export async function loadHistoryBaseline(
   }
 
   const periods = Array.from({ length: horizonMonths }, (_, i) => monthStart(i));
-  const points = [] as { productId: string; sku: string; period: string; quantity: number }[];
+  const points = [] as {
+    productId: string;
+    sku: string;
+    productName: string;
+    period: string;
+    quantity: number;
+  }[];
   for (const product of products ?? []) {
     const entry = totals.get(product.id);
     if (!entry || entry.months.size === 0) continue;
     const perMonth = entry.qty / entry.months.size;
     if (perMonth <= 0) continue;
     for (const period of periods) {
-      points.push({ productId: product.id, sku: product.sku, period, quantity: perMonth });
+      points.push({
+        productId: product.id,
+        sku: product.sku,
+        productName: product.name,
+        period,
+        quantity: perMonth,
+      });
     }
   }
   return { points, periods, productNames: new Map((products ?? []).map((p) => [p.id, p.name])) };
