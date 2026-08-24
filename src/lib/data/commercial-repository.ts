@@ -310,3 +310,55 @@ export async function deleteCommercialRecord(
   const { error } = await supabase.from(table).delete().eq("id", id).eq("org_id", orgId);
   fail(error);
 }
+
+/**
+ * Historical run rate projected forward.
+ *
+ * Reads observed monthly sales, averages the trailing window per product and
+ * carries that average across the forward horizon. This is the SAME idea the
+ * planning baseline uses — an average of observed history, nothing inferred —
+ * expressed at the product/period grain the Demand Book resolves on.
+ */
+export async function loadHistoryBaseline(
+  supabase: Db,
+  orgId: string,
+  opts: { windowMonths?: number; horizonMonths?: number } = {},
+) {
+  const windowMonths = opts.windowMonths ?? 12;
+  const horizonMonths = opts.horizonMonths ?? 6;
+  const [{ data: products, error: pErr }, { data: sales, error: sErr }] = await Promise.all([
+    supabase.from("products").select("id, sku, name").eq("org_id", orgId),
+    supabase.from("sales").select("product_id, period_month, quantity").eq("org_id", orgId),
+  ]);
+  fail(pErr);
+  fail(sErr);
+
+  const now = new Date();
+  const monthStart = (offset: number) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)).toISOString().slice(0, 10);
+  const windowFrom = monthStart(-windowMonths);
+  const today = monthStart(0);
+
+  const totals = new Map<string, { qty: number; months: Set<string> }>();
+  for (const row of sales ?? []) {
+    const period = String(row.period_month);
+    if (period < windowFrom || period >= today) continue;
+    const entry = totals.get(row.product_id) ?? { qty: 0, months: new Set<string>() };
+    entry.qty += Number(row.quantity ?? 0);
+    entry.months.add(period);
+    totals.set(row.product_id, entry);
+  }
+
+  const periods = Array.from({ length: horizonMonths }, (_, i) => monthStart(i));
+  const points = [] as { productId: string; sku: string; period: string; quantity: number }[];
+  for (const product of products ?? []) {
+    const entry = totals.get(product.id);
+    if (!entry || entry.months.size === 0) continue;
+    const perMonth = entry.qty / entry.months.size;
+    if (perMonth <= 0) continue;
+    for (const period of periods) {
+      points.push({ productId: product.id, sku: product.sku, period, quantity: perMonth });
+    }
+  }
+  return { points, periods, productNames: new Map((products ?? []).map((p) => [p.id, p.name])) };
+}
