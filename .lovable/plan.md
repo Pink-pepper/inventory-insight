@@ -17,15 +17,22 @@ Each package ends with a building app, coherent navigation and passing tests. I 
 
 ### Package A — Commercial spine and Demand Book
 
-New tables (org-scoped, RLS + GRANTs, same patterns as existing): `contacts`, `requirements`, `opportunities`, `quotations`, `customer_orders` (LPO, multi-period capable), and `demand_signals` — the Demand Book.
+New tables (org-scoped, RLS + GRANTs, same patterns as existing): `contacts`, `requirements`, `opportunities`, `quotations`, `customer_orders` (LPO, multi-period capable), `market_signals`, and `demand_signals` — the Demand Book.
 
-A demand signal carries: customer, product, quantity/unit, expected period, channel (`direct_shipment` | `dropship` | `stock`), source (`history` | `requirement` | `opportunity` | `quotation` | `lpo` | `order` | `market` | `planner`), certainty (`speculative` → `expected` → `active` → `high_confidence` → `committed` → `confirmed` → `actual`), probability, status, notes.
+A demand signal carries: customer, product, quantity/unit, expected period, channel (`direct_shipment` | `dropship` | `stock`), source (`history` | `requirement` | `opportunity` | `quotation` | `lpo` | `order` | `market` | `planner`), certainty (`speculative` → `expected` → `active` → `high_confidence` → `committed` → `confirmed` → `actual`), probability, status, evidence/notes, date, and a link to the commercial record it came from.
 
 `customers` and `channels` already exist and are reused. Historical actuals are projected into the book as `history`-sourced signals rather than being a separate path.
 
-Demand engine change: `lib/demand/` gains a book resolver that combines signals into a per-SKU/period demand picture with certainty weighting, and history becomes one input. **`buildDemandBaseline` remains the single history primitive** — no parallel demand engine; supply, distribution, recommendations and scenarios all continue to read one resolved demand series.
+**Resolution, not summation.** The book is a unified evidence layer. The resolver (`lib/demand/resolve.ts`) never adds overlapping signals: signals are grouped by the commercial event they describe (customer + product + period + originating record chain), and within a group the highest-certainty signal wins — an LPO supersedes its quotation, a quotation supersedes its opportunity, realised actuals supersede everything for a closed period. History informs the baseline for demand not otherwise claimed by a named commercial signal; opportunities count only as incremental demand above that baseline. Every superseding rule is documented in code and covered by unit tests, including deliberate double-count cases.
 
-UI: `Business` section — Customers, Contacts, Requirements, Opportunities, Quotations, Demand Book. Demand Book is the centre: filterable table with expandable rows showing evidence (which signals, which customers, what confidence), and an export.
+**Confidence stays a commercial judgement.** No black-box weighted forecast. Probability applies to uncertain opportunities only; certainty, source, evidence, status and date are preserved and shown. Each resolved demand row expands into the exact signals that produced it, which ones were superseded and why, so "why does Ionic expect this demand?" is answered from records rather than from an invented statistical reason.
+
+**Market Signals** are deliberately lightweight: a small record of external/commercial context (competitor pricing or availability, supplier changes, market gaps, consumption changes, new product opportunities, supply disruption, regulatory conditions) that can be attached to a customer, product or supplier and referenced as evidence. They inform judgement and appear in the Control Tower; they do not silently alter numbers. No market-research platform.
+
+Demand engine change: `lib/demand/` gains this resolver, and history becomes one input. **`buildDemandBaseline` remains the single history primitive** — no parallel demand engine; supply, distribution, recommendations, business plan and scenarios all read one resolved demand series.
+
+UI: `Business` section — Customers, Contacts, Requirements, Opportunities, Quotations, Market Signals, Demand Book. Demand Book is the centre: filterable table with expandable rows showing the resolution trail, and an export.
+
 
 ### Package B — Landed economics and shipments
 
