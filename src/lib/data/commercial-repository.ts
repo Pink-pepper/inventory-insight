@@ -290,7 +290,10 @@ export async function saveCommercialRecord(
   id: string | null,
   values: Record<string, unknown>,
 ) {
-  const payload = { ...values, org_id: orgId };
+  // The writable surface is validated by the caller's zod schema; the storage
+  // row type is a union across seven tables, so one cast at this boundary
+  // keeps the rest of the layer typed.
+  const payload = { ...values, org_id: orgId } as never;
   if (id) {
     const { error } = await supabase.from(table).update(payload).eq("id", id).eq("org_id", orgId);
     fail(error);
