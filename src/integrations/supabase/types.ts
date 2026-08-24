@@ -81,6 +81,149 @@ export type Database = {
           },
         ]
       }
+      contacts: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          org_id: string
+          phone: string | null
+          role: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          org_id: string
+          phone?: string | null
+          role?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          org_id?: string
+          phone?: string | null
+          role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_orders: {
+        Row: {
+          channel: Database["public"]["Enums"]["channel_kind"]
+          confirmation: string | null
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          id: string
+          notes: string | null
+          org_id: string
+          period_end: string | null
+          period_start: string
+          product_id: string | null
+          quantity: number
+          quotation_id: string | null
+          reference: string | null
+          status: Database["public"]["Enums"]["commercial_status"]
+          unit: string | null
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          confirmation?: string | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          period_end?: string | null
+          period_start: string
+          product_id?: string | null
+          quantity?: number
+          quotation_id?: string | null
+          reference?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          confirmation?: string | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          period_end?: string | null
+          period_start?: string
+          product_id?: string | null
+          quantity?: number
+          quotation_id?: string | null
+          reference?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_orders_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_orders_quotation_id_fkey"
+            columns: ["quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string
@@ -234,6 +377,104 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      demand_signals: {
+        Row: {
+          certainty: Database["public"]["Enums"]["demand_certainty"]
+          channel: Database["public"]["Enums"]["channel_kind"]
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          expected_period: string
+          id: string
+          notes: string | null
+          org_id: string
+          probability: number | null
+          product_id: string
+          quantity: number
+          source: Database["public"]["Enums"]["demand_source"]
+          source_record_id: string | null
+          source_record_type: string | null
+          status: Database["public"]["Enums"]["commercial_status"]
+          supersedes_id: string | null
+          unit: string | null
+          unit_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          certainty: Database["public"]["Enums"]["demand_certainty"]
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_period: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          probability?: number | null
+          product_id: string
+          quantity?: number
+          source: Database["public"]["Enums"]["demand_source"]
+          source_record_id?: string | null
+          source_record_type?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          supersedes_id?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Update: {
+          certainty?: Database["public"]["Enums"]["demand_certainty"]
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_period?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          probability?: number | null
+          product_id?: string
+          quantity?: number
+          source?: Database["public"]["Enums"]["demand_source"]
+          source_record_id?: string | null
+          source_record_type?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          supersedes_id?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demand_signals_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demand_signals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demand_signals_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demand_signals_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "demand_signals"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -485,6 +726,80 @@ export type Database = {
           },
         ]
       }
+      market_signals: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          detail: string | null
+          id: string
+          impact: string
+          kind: string
+          observed_on: string
+          org_id: string
+          product_id: string | null
+          supplier_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          detail?: string | null
+          id?: string
+          impact?: string
+          kind: string
+          observed_on?: string
+          org_id: string
+          product_id?: string | null
+          supplier_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          detail?: string | null
+          id?: string
+          impact?: string
+          kind?: string
+          observed_on?: string
+          org_id?: string
+          product_id?: string | null
+          supplier_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_signals_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_signals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_signals_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_signals_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -513,6 +828,95 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opportunities: {
+        Row: {
+          channel: Database["public"]["Enums"]["channel_kind"]
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          expected_period: string
+          expected_unit_price: number | null
+          id: string
+          notes: string | null
+          org_id: string
+          probability: number
+          product_id: string | null
+          quantity: number
+          requirement_id: string | null
+          status: Database["public"]["Enums"]["commercial_status"]
+          title: string
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_period: string
+          expected_unit_price?: number | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          probability?: number
+          product_id?: string | null
+          quantity?: number
+          requirement_id?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          title: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_period?: string
+          expected_unit_price?: number | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          probability?: number
+          product_id?: string | null
+          quantity?: number
+          requirement_id?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          title?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opportunities_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "requirements"
             referencedColumns: ["id"]
           },
         ]
@@ -811,6 +1215,98 @@ export type Database = {
           },
         ]
       }
+      quotations: {
+        Row: {
+          channel: Database["public"]["Enums"]["channel_kind"]
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          expected_period: string
+          id: string
+          issued_on: string | null
+          notes: string | null
+          opportunity_id: string | null
+          org_id: string
+          product_id: string | null
+          quantity: number
+          reference: string | null
+          status: Database["public"]["Enums"]["commercial_status"]
+          unit: string | null
+          unit_price: number | null
+          updated_at: string
+          valid_until: string | null
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_period: string
+          id?: string
+          issued_on?: string | null
+          notes?: string | null
+          opportunity_id?: string | null
+          org_id: string
+          product_id?: string | null
+          quantity?: number
+          reference?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+          valid_until?: string | null
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_period?: string
+          id?: string
+          issued_on?: string | null
+          notes?: string | null
+          opportunity_id?: string | null
+          org_id?: string
+          product_id?: string | null
+          quantity?: number
+          reference?: string | null
+          status?: Database["public"]["Enums"]["commercial_status"]
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recommendations: {
         Row: {
           action: Database["public"]["Enums"]["rec_action"]
@@ -877,6 +1373,76 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "products"
             referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      requirements: {
+        Row: {
+          channel: Database["public"]["Enums"]["channel_kind"]
+          created_at: string
+          customer_id: string | null
+          id: string
+          notes: string | null
+          org_id: string
+          period_end: string | null
+          period_start: string
+          product_id: string | null
+          quantity: number
+          status: Database["public"]["Enums"]["commercial_status"]
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          period_end?: string | null
+          period_start: string
+          product_id?: string | null
+          quantity?: number
+          status?: Database["public"]["Enums"]["commercial_status"]
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["channel_kind"]
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          period_end?: string | null
+          period_start?: string
+          product_id?: string | null
+          quantity?: number
+          status?: Database["public"]["Enums"]["commercial_status"]
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requirements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1213,6 +1779,15 @@ export type Database = {
       is_org_member: { Args: { _org_id: string }; Returns: boolean }
     }
     Enums: {
+      channel_kind: "direct_shipment" | "dropship" | "stock"
+      commercial_status:
+        | "open"
+        | "won"
+        | "lost"
+        | "cancelled"
+        | "expired"
+        | "superseded"
+        | "fulfilled"
       connector_type:
         | "csv"
         | "odoo"
@@ -1220,6 +1795,23 @@ export type Database = {
         | "dynamics"
         | "netsuite"
         | "custom_api"
+      demand_certainty:
+        | "speculative"
+        | "expected"
+        | "active"
+        | "high_confidence"
+        | "committed"
+        | "confirmed"
+        | "actual"
+      demand_source:
+        | "history"
+        | "requirement"
+        | "opportunity"
+        | "quotation"
+        | "lpo"
+        | "order"
+        | "market"
+        | "planner"
       movement_class:
         | "sale"
         | "consumption"
@@ -1365,6 +1957,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      channel_kind: ["direct_shipment", "dropship", "stock"],
+      commercial_status: [
+        "open",
+        "won",
+        "lost",
+        "cancelled",
+        "expired",
+        "superseded",
+        "fulfilled",
+      ],
       connector_type: [
         "csv",
         "odoo",
@@ -1372,6 +1974,25 @@ export const Constants = {
         "dynamics",
         "netsuite",
         "custom_api",
+      ],
+      demand_certainty: [
+        "speculative",
+        "expected",
+        "active",
+        "high_confidence",
+        "committed",
+        "confirmed",
+        "actual",
+      ],
+      demand_source: [
+        "history",
+        "requirement",
+        "opportunity",
+        "quotation",
+        "lpo",
+        "order",
+        "market",
+        "planner",
       ],
       movement_class: [
         "sale",
