@@ -44,13 +44,21 @@ Supply projection consumes shipment ETAs instead of a single PO `expected_at`, k
 
 UI: `Supply` section — Purchase Orders (existing inbox preserved), Shipments, Inbound, Import/Clearance. Procurement decisions gain a landed-economics panel answering "can I buy this and still make money?".
 
-### Package C — Control Tower and inventory depth
+### Package C — Control Tower, inventory depth and Business Plan
 
-`lib/control-tower/signals.ts` derives prioritised exceptions from real data only — shipment delay vs committed demand, cover vs next inbound ETA, quotation ageing, landed-cost movement vs quoted margin, demand shifts, slow-moving stock, unmatched supply for qualified demand. Each item is typed urgent / warning / opportunity / informational / healthy, and each expands to its evidence and then to the underlying record. No fabricated signals; demo-derived items are labelled as demo.
+`lib/control-tower/signals.ts` derives prioritised exceptions from real data only — shipment delay vs committed demand, cover vs next inbound ETA, quotation ageing, landed-cost movement vs quoted margin, demand shifts, slow-moving stock, unmatched supply for qualified demand, recorded market signals. Each item is typed urgent / warning / opportunity / informational / healthy, and each expands to its evidence and then to the underlying record. No fabricated signals; demo-derived items are labelled as demo.
 
 Inventory gains committed vs free quantity (from committed demand signals), expected inbound, ageing/expiry where data exists, value, COGS and margin. Existing inventory calculations are extended, not duplicated.
 
 The Control Tower becomes `/` for signed-in users; the old `overview` dashboard content is folded into it or retired.
+
+**Business Plan** is a real workflow, not a nav label. One table `business_plans` plus `business_plan_lines` holds an annual revenue target and gross-profit target, broken down into contribution lines by supplier, product and customer with expected quantity, expected revenue, expected GP and margin. Two directions over the same lines:
+
+- Bottom-up: lines are seeded from the resolved Demand Book and landed economics (quantity × selling price → revenue; minus landed cost → GP), then adjusted.
+- Top-down: an annual target is allocated across suppliers/products/customers by share, then reconciled.
+
+The plan screen always shows the reconciliation gap between the sum of contribution lines and the annual targets, per dimension. "What changes when assumptions change" reuses the **existing scenario engine** — a business plan can be evaluated under a scenario's assumptions through `executeScenario`; no second planning system, no duplicate demand or cost math. Export included.
+
 
 ### Package D — Navigation, visual redesign, exports, de-scoping
 
