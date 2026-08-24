@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { resolveDemandBook, type HistoryBaselinePoint } from "./resolve";
 import type { DemandSignalRecord } from "@/lib/domain/commercial";
 
