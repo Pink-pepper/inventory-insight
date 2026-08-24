@@ -28,7 +28,13 @@ import { cn } from "@/lib/utils";
  * Navigation follows the distributor's working order: what the business has
  * sold or is about to sell, then what that means for stock and supply.
  */
-const NAV_GROUPS = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
     items: [{ to: "/overview", label: "Dashboard", icon: LayoutDashboard }],
@@ -61,9 +67,9 @@ const NAV_GROUPS = [
       { to: "/settings", label: "Settings", icon: Settings },
     ],
   },
-] as const;
+];
 
-const NAV = NAV_GROUPS.flatMap((g) => g.items);
+const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 export function useWorkspace() {
   const fn = useServerFn(getWorkspace);
