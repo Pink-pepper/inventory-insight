@@ -5,26 +5,194 @@ import { buildDemoDataset } from "@/lib/connectors/demo-dataset";
 import { csvConnector } from "@/lib/connectors/csv-connector";
 import {
   audit,
+  batchDemandFootprint,
   buildRecommendationView,
+  createImportBatch,
+  createScenario as createScenarioRecord,
+  deleteBatchRows,
+  deleteScenario as deleteScenarioRecord,
+  getEffectivePolicy,
+  getImportBatch,
   getLastRun,
   getProfile,
+  getScenario as getScenarioRecord,
+  getScenarioRun as getScenarioRunRecord,
+  inactiveBatchIds,
+  insertScenarioRun as insertScenarioRunRecord,
   listAuditEvents,
   listDataSources,
+  listImportBatches,
+  listPurchaseOrders,
+  listScenarios as listScenarioRecords,
+  loadDemandFacts,
+  loadOpenSupply,
+  loadSignals,
   persistDataset,
+  persistForecasts,
+  persistMovements,
+  persistPurchaseOrders,
+  persistTransactions,
+  rebuildMonthlyForProducts,
   regenerateRecommendations,
   resolveOrg,
+  savePlanningPolicy,
+  setImportBatchStatus,
+  updatePurchaseOrderApproval,
+  updateScenario as updateScenarioRecord,
 } from "@/lib/data/repository";
+import { hasAssumptions, scenarioAssumptionsSchema } from "@/lib/scenario/assumptions";
+import { executeScenario } from "@/lib/scenario/run";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
+import { canonicalise, type SheetPlan } from "@/lib/ingestion/canonicalise";
+import { formatOf, inspectSheets, toSheets } from "@/lib/ingestion/inspect";
+import { LIMITS } from "@/lib/ingestion/sheet-table";
+import {
+  EMPTY_PLANNING_POLICY,
+  type PlanningPolicy,
+} from "@/lib/domain/planning-policy";
 import { summarise } from "@/lib/analytics/summary";
+import {
+  DEMAND_DIMENSIONS,
+  applyPlanningFilter,
+  planningFilterSchema,
+  type PlanningFilter,
+} from "@/lib/query/filters";
+import { buildDemandPlan, filterOptions } from "@/lib/demand/plan";
+import { buildSupplyPlan } from "@/lib/supply/plan";
+import { buildDistributionPlan } from "@/lib/distribution/plan";
+
+/**
+ * Supply Planning: demand plan + inventory position + open purchase orders →
+ * net requirement, order-by dates, and explicit fulfilment risks. Everything
+ * is computed on the fly from authoritative tables — nothing is pre-computed.
+ */
+export const getSupplyPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ filter: planningFilterSchema.optional() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filter: PlanningFilter = data.filter ?? {};
+    const [facts, policy, rows, openSupply, lastRun] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      buildRecommendationView(supabase, orgId),
+      loadOpenSupply(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    const plan = buildSupplyPlan({ facts, engineRows: rows, openSupply, policy, filter });
+    return {
+      ...plan,
+      options: filterOptions(facts),
+      policy,
+      lastRun,
+      calculatedAt: new Date().toISOString(),
+    };
+  });
+
+/**
+ * Distribution Planning: the supply plan's purchase requirements checked
+ * against per-location excess. A transfer suggestion only ever substitutes
+ * for a requirement the supply plan already computed — it never invents one.
+ */
+export const getDistributionPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ filter: planningFilterSchema.optional() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filter: PlanningFilter = data.filter ?? {};
+    const [facts, policy, rows, openSupply] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      buildRecommendationView(supabase, orgId),
+      loadOpenSupply(supabase, orgId),
+    ]);
+    const supply = buildSupplyPlan({ facts, engineRows: rows, openSupply, policy, filter });
+    const plan = buildDistributionPlan({ supplyRows: supply.rows, facts, openSupply, policy, filter });
+    return {
+      ...plan,
+      options: filterOptions(facts),
+      calculatedAt: new Date().toISOString(),
+    };
+  });
+
+export const getDemandPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({
+      filter: planningFilterSchema.optional(),
+      dimension: z.enum(DEMAND_DIMENSIONS).optional(),
+    }).parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const filter: PlanningFilter = data.filter ?? {};
+    const [facts, policy, rows, lastRun] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      buildRecommendationView(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+
+    const plan = buildDemandPlan({
+      facts,
+      filter,
+      policy,
+      dimension: data.dimension ?? "product",
+    });
+
+    // Inventory implications for exactly the products in scope, carrying the
+    // observed demand direction so the planner sees signal and position side
+    // by side. Every number still comes from the existing engine.
+    const directionBySku = new Map(plan.skuDirection.map((d) => [d.sku, d]));
+    const scoped = applyPlanningFilter(
+      rows.map((r) => ({
+        ...r,
+        locationCodes: r.locations.map((l) => l.location),
+      })),
+      filter,
+    );
+    const planningRows = scoped
+      .filter((r) => plan.totals.skus === 0 || directionBySku.has(r.sku))
+      .map((r) => ({
+        sku: r.sku,
+        name: r.name,
+        category: r.category,
+        supplierName: r.supplierName,
+        action: r.action,
+        onHand: r.onHand,
+        onOrder: r.onOrder,
+        daysOfCover: r.daysOfCover,
+        reorderPoint: r.reorderPoint,
+        recommendedQty: r.recommendedQty,
+        estimatedCost: r.estimatedCost,
+        avgMonthlyDemand: r.avgMonthlyDemand,
+        blocked: r.blocked,
+        observedDemand: directionBySku.get(r.sku)?.quantity ?? 0,
+        demandChangePct: directionBySku.get(r.sku)?.changePct ?? null,
+      }));
+
+    return {
+      plan,
+      planningRows,
+      options: filterOptions(facts),
+      policy,
+      lastRun,
+      calculatedAt: new Date().toISOString(),
+    };
+  });
 
 export const getWorkspace = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { org, role, orgId } = await resolveOrg(supabase, userId);
-    const [profile, dataSources, { count }] = await Promise.all([
+    const [profile, dataSources, planningPolicy, { count }] = await Promise.all([
       getProfile(supabase, userId),
       listDataSources(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
       supabase.from("products").select("id", { count: "exact", head: true }).eq("org_id", orgId),
     ]);
     return {
@@ -32,6 +200,7 @@ export const getWorkspace = createServerFn({ method: "GET" })
       role,
       profile,
       dataSources,
+      planningPolicy,
       productCount: count ?? 0,
     };
   });
@@ -176,10 +345,35 @@ export const clearWorkspaceData = createServerFn({ method: "POST" })
     if (role !== "owner" && role !== "admin") {
       throw new Error("Only workspace owners and admins can delete data.");
     }
-    for (const table of ["recommendations", "sales", "inventory", "products", "suppliers", "data_sources"] as const) {
+    // Children before parents: fact tables reference products/suppliers/
+    // locations/customers/channels via composite keys and would block or
+    // corrupt the wipe if masters were removed first. Batch records are kept
+    // (audit trail) and soft-retired instead of hard-deleted.
+    const tables = [
+      "recommendations",
+      "demand_forecasts",
+      "inventory_movements",
+      "purchase_orders",
+      "sales_transactions",
+      "sales",
+      "inventory",
+      "products",
+      "suppliers",
+      "customers",
+      "channels",
+      "locations",
+      "data_sources",
+    ] as const;
+    for (const table of tables) {
       const { error } = await supabase.from(table).delete().eq("org_id", orgId);
       if (error) throw new Error(error.message);
     }
+    const { error: batchError } = await supabase
+      .from("import_batches")
+      .update({ status: "deleted" })
+      .eq("org_id", orgId)
+      .neq("status", "deleted");
+    if (batchError) throw new Error(batchError.message);
     await audit(supabase, orgId, userId, "data.delete", { scope: "workspace" });
     return { ok: true };
   });
@@ -192,6 +386,57 @@ export const getAuditLog = createServerFn({ method: "GET" })
     return listAuditEvents(supabase, orgId, 50);
   });
 
+/** Nullable numeric policy input: null means "not configured". */
+const optNum = (max: number) => z.number().min(0).max(max).nullable().optional();
+
+const planningPolicyInput = z.object({
+  demandWindowMonths: z.number().int().min(1).max(60).nullable().optional(),
+  planningHorizonDays: z.number().int().min(1).max(730).nullable().optional(),
+  safetyStockDays: z.number().int().min(0).max(365).nullable().optional(),
+  defaultLeadTimeDays: z.number().int().min(0).max(730).nullable().optional(),
+  defaultMinOrderQty: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  orderMultiple: z.number().int().min(1).max(1_000_000).nullable().optional(),
+  reorderPointOverride: optNum(1_000_000_000),
+  minimumStockLevel: optNum(1_000_000_000),
+  targetStockLevel: optNum(1_000_000_000),
+  daysOfCoverTarget: optNum(3650),
+  serviceLevel: z.number().min(0).max(1).nullable().optional(),
+  demandMethod: z.literal("trailing_average").nullable().optional(),
+  demandGrowthPct: z.number().min(-100).max(1000).nullable().optional(),
+  seasonalityEnabled: z.boolean().nullable().optional(),
+  demandVariability: optNum(100),
+  leadTimeVariabilityDays: optNum(365),
+  productDisplay: z.enum(["sku", "name", "sku_name"]),
+});
+
+export const getPlanningPolicy = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    return getEffectivePolicy(supabase, orgId);
+  });
+
+export const updatePlanningPolicy = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(planningPolicyInput.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    // Defence in depth: RLS also restricts writes to owners and admins.
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change the planning policy.");
+    }
+    const merged = { ...EMPTY_PLANNING_POLICY, ...data } as PlanningPolicy;
+    const saved = await savePlanningPolicy(supabase, orgId, merged);
+    await audit(supabase, orgId, userId, "planning.policy.updated", {
+      product_display: saved.productDisplay,
+      demand_window_months: saved.demandWindowMonths,
+      planning_horizon_days: saved.planningHorizonDays,
+    });
+    return saved;
+  });
+
 export const recordLogin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -199,4 +444,542 @@ export const recordLogin = createServerFn({ method: "POST" })
     const { orgId } = await resolveOrg(supabase, userId);
     await audit(supabase, orgId, userId, "auth.login", {});
     return { ok: true };
+  });
+
+/* ------------------------------------------------------------------ *
+ * Spreadsheet ingestion: inspect first, import only after confirmation
+ * ------------------------------------------------------------------ */
+
+const uploadInput = z.object({
+  filename: z.string().min(1).max(200),
+  encoding: z.enum(["text", "base64"]),
+  content: z.string().min(1).max(9_000_000),
+});
+
+const ENTITY_KINDS = [
+  "combined",
+  "products",
+  "suppliers",
+  "inventory",
+  "sales_monthly",
+  "transactions",
+  "customers",
+  "channels",
+  "purchase_orders",
+  "demand_forecast",
+  "inventory_movement",
+  "planning_policy",
+  "documentation",
+  "ignored",
+] as const;
+
+const importInput = uploadInput.extend({
+  plans: z
+    .array(
+      z.object({
+        sheetName: z.string().min(1).max(200),
+        kind: z.enum(ENTITY_KINDS),
+        mapping: z.record(z.string().max(64), z.number().int().min(0).max(500)),
+      }),
+    )
+    .min(1)
+    .max(30),
+  /** Which policy proposals the user accepted: (sheet, field) pairs only.
+   *  Values are never trusted from the client — they are re-derived from the
+   *  file on the server before anything is applied. */
+  policyDecisions: z
+    .array(
+      z.object({
+        sheet: z.string().min(1).max(200),
+        field: z.string().min(1).max(64),
+        accepted: z.boolean(),
+      }),
+    )
+    .max(50)
+    .optional(),
+});
+
+/** Sanitises a client-supplied filename down to a safe basename. */
+function safeFilename(raw: string): string {
+  const base = raw.split(/[\\/]/).pop() ?? "upload";
+  const cleaned = base.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) || "upload";
+  if (!/\.(csv|xlsx)$/i.test(cleaned)) {
+    throw new Error("Only .csv and .xlsx files are supported.");
+  }
+  return cleaned;
+}
+
+/** Decodes the upload into the shape its source adapter needs, enforcing the size limit. */
+function decodeUpload(encoding: "text" | "base64", content: string) {
+  if (encoding === "base64") {
+    const binary = atob(content);
+    if (binary.length > LIMITS.maxBytes) throw new Error("File exceeds the 5 MB limit.");
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return { bytes };
+  }
+  if (new TextEncoder().encode(content).byteLength > LIMITS.maxBytes) {
+    throw new Error("File exceeds the 5 MB limit.");
+  }
+  return { text: content };
+}
+
+/**
+ * Step one: parse the upload in memory and report what was found. Nothing is
+ * written to the workspace and the file is never stored.
+ */
+export const inspectUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(uploadInput.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await resolveOrg(supabase, userId);
+    const filename = safeFilename(data.filename);
+    const payload = decodeUpload(data.encoding, data.content);
+    const format = formatOf(filename, payload.bytes);
+    const sheets = toSheets(format, payload);
+    return inspectSheets(filename, format, sheets);
+  });
+
+/**
+ * Step two: canonicalise the confirmed sheets and commit them. The
+ * organisation is derived server-side and every row is validated again here —
+ * the preview is never trusted as authorisation or as validated input.
+ */
+export const importUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(importInput.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    const filename = safeFilename(data.filename);
+    const payload = decodeUpload(data.encoding, data.content);
+    const format = formatOf(filename, payload.bytes);
+    const sheets = toSheets(format, payload);
+
+    const plans: SheetPlan[] = data.plans.filter((p) => sheets.some((s) => s.sheetName === p.sheetName));
+    if (plans.every((p) => p.kind === "ignored" || p.kind === "planning_policy" || p.kind === "documentation")) {
+      throw new Error("No sheets were selected for import.");
+    }
+
+    const result = canonicalise(sheets, plans);
+    if (
+      result.dataset.products.length === 0 &&
+      result.dataset.inventory.length === 0 &&
+      result.dataset.sales.length === 0 &&
+      (result.dataset.transactions?.length ?? 0) === 0 &&
+      (result.dataset.purchaseOrders?.length ?? 0) === 0 &&
+      (result.dataset.forecasts?.length ?? 0) === 0 &&
+      (result.dataset.movements?.length ?? 0) === 0
+    ) {
+      throw new Error(
+        result.issues.find((i) => i.severity === "error")?.message ??
+          "No valid rows were found in the selected sheets.",
+      );
+    }
+
+    const batchId = await createImportBatch(supabase, orgId, userId, {
+      source: format,
+      filename,
+      sheetSummary: plans.map((p) => ({
+        sheet: p.sheetName,
+        kind: p.kind,
+        rows: sheets.find((s) => s.sheetName === p.sheetName)?.rowCount ?? 0,
+      })),
+      rowsRead: result.stats.rowsRead,
+      rowsAccepted: result.stats.rowsAccepted,
+      rowsRejected: result.stats.rowsRejected,
+      warnings: result.stats.warnings,
+    });
+
+    const counts = await persistDataset(supabase, orgId, result.dataset, batchId);
+    const tx = await persistTransactions(supabase, orgId, result.dataset, batchId);
+    const pos = await persistPurchaseOrders(supabase, orgId, result.dataset.purchaseOrders, batchId);
+    const fc = await persistForecasts(supabase, orgId, result.dataset.forecasts, batchId);
+    const mv = await persistMovements(supabase, orgId, result.dataset.movements, batchId);
+
+    // Accepted policy proposals: the client sends (sheet, field) pairs only;
+    // the values are re-derived from the file itself before anything is
+    // applied. Organisation-scope, fully parsed proposals only — specific or
+    // ambiguous values are reported, never written.
+    const accepted = new Set(
+      (data.policyDecisions ?? []).filter((d) => d.accepted).map((d) => `${d.sheet}|${d.field}`),
+    );
+    const policyApplied: string[] = [];
+    const policySkipped: string[] = [];
+    if (accepted.size > 0) {
+      const inspection = inspectSheets(filename, format, sheets);
+      const plannedAs = new Map(plans.map((p) => [p.sheetName, p.kind]));
+      const patch: Record<string, number | boolean> = {};
+      for (const proposal of inspection.policyProposals) {
+        if (!accepted.has(`${proposal.sheet}|${proposal.field}`)) continue;
+        const sheetPlan = plannedAs.get(proposal.sheet);
+        if (sheetPlan !== "planning_policy" && sheetPlan !== "ignored") continue;
+        if (proposal.scope !== "organisation" || proposal.proposed == null) {
+          policySkipped.push(proposal.label);
+          continue;
+        }
+        patch[proposal.field] = proposal.proposed;
+        policyApplied.push(proposal.label);
+      }
+      if (policyApplied.length > 0) {
+        if (role !== "owner" && role !== "admin") {
+          throw new Error("Only workspace owners and admins can change the planning policy.");
+        }
+        const current = await getEffectivePolicy(supabase, orgId);
+        await savePlanningPolicy(supabase, orgId, { ...current, ...patch });
+        await audit(supabase, orgId, userId, "planning.policy.updated", {
+          source: "import",
+          filename,
+          applied: policyApplied.join(", "),
+        });
+      }
+    }
+
+    const { error: dsError } = await supabase.from("data_sources").insert({
+      org_id: orgId,
+      connector: "csv",
+      name: filename,
+      status: "active",
+      last_sync_at: new Date().toISOString(),
+      rows_ingested: result.stats.rowsAccepted,
+      error_count: result.stats.rowsRejected,
+    });
+    if (dsError) throw new Error(dsError.message);
+
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, "data.import", {
+      format,
+      filename,
+      batch_id: batchId,
+      sheets: plans.filter((p) => p.kind !== "ignored").length,
+      rows_accepted: result.stats.rowsAccepted,
+      rows_rejected: result.stats.rowsRejected,
+      transactions: tx.inserted,
+      duplicates: tx.duplicates,
+      purchase_orders: pos.inserted,
+      purchase_orders_updated: pos.updated,
+      po_duplicates: pos.duplicates,
+      po_unknown_locations: pos.unknownLocations.length,
+      forecasts: fc.inserted,
+      forecast_duplicates: fc.duplicates,
+      movements: mv.inserted,
+      movement_duplicates: mv.duplicates,
+      policy_applied: policyApplied.join(", "),
+    });
+    await audit(supabase, orgId, userId, "recommendations.generated", {
+      evaluated: run.evaluated,
+      blocked: run.blocked,
+      run_id: run.runId,
+    });
+
+    return {
+      batchId,
+      ...counts,
+      transactions: tx,
+      purchaseOrders: pos,
+      forecasts: fc,
+      movements: mv,
+      policyApplied,
+      policySkipped,
+      issues: result.issues,
+      stats: result.stats,
+      evaluated: run.evaluated,
+      run,
+    };
+  });
+
+/* ------------------------------------------------------------------ *
+ * Import lifecycle: list, deactivate/reactivate, delete
+ * ------------------------------------------------------------------ */
+
+/** Every visible import batch with live row counts and the caller's manage rights. */
+export const getImportBatches = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    const batches = await listImportBatches(supabase, orgId);
+    return { batches, canManage: role === "owner" || role === "admin" };
+  });
+
+/**
+ * Deactivate/reactivate an import. Its transaction and PO rows stay in place
+ * but stop feeding planning; the affected monthly aggregates are rebuilt and
+ * recommendations regenerated so every surface reflects the change at once.
+ */
+export const setImportBatchActive = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ batchId: z.string().uuid(), active: z.boolean() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change import state.");
+    }
+    const batch = await getImportBatch(supabase, orgId, data.batchId);
+    if (!batch) throw new Error("Import not found in this workspace.");
+    if (batch.status === "deleted") {
+      throw new Error("This import has been permanently deleted and can no longer be changed.");
+    }
+    const target = data.active ? "completed" : "inactive";
+    if (batch.status === target) return { ok: true, changed: false };
+
+    await setImportBatchStatus(supabase, orgId, batch.id, target);
+    const footprint = await batchDemandFootprint(supabase, orgId, batch.id);
+    const inactive = await inactiveBatchIds(supabase, orgId);
+    await rebuildMonthlyForProducts(supabase, orgId, footprint.productIds, footprint.months, inactive);
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, data.active ? "import.reactivated" : "import.deactivated", {
+      batch_id: batch.id,
+      filename: batch.filename,
+      products_recomputed: footprint.productIds.length,
+      evaluated: run.evaluated,
+    });
+    return { ok: true, changed: true };
+  });
+
+/**
+ * Permanently remove an import's transaction and PO rows. The batch must be
+ * inactive first (two-step guard); the batch record itself is kept for audit
+ * with status 'deleted' (hard deletes are blocked at the database level).
+ */
+export const deleteImportBatch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ batchId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can delete imports.");
+    }
+    const batch = await getImportBatch(supabase, orgId, data.batchId);
+    if (!batch) throw new Error("Import not found in this workspace.");
+    if (batch.status === "deleted") return { ok: true, already: true, transactions: 0, purchaseOrders: 0, forecasts: 0, movements: 0 };
+    if (batch.status !== "inactive") {
+      throw new Error("Deactivate the import before deleting it permanently.");
+    }
+
+    const footprint = await batchDemandFootprint(supabase, orgId, batch.id);
+    const removed = await deleteBatchRows(supabase, orgId, batch.id);
+    const inactive = await inactiveBatchIds(supabase, orgId);
+    await rebuildMonthlyForProducts(supabase, orgId, footprint.productIds, footprint.months, inactive);
+    await setImportBatchStatus(supabase, orgId, batch.id, "deleted");
+    const run = await regenerateRecommendations(supabase, orgId);
+    await audit(supabase, orgId, userId, "import.deleted", {
+      batch_id: batch.id,
+      filename: batch.filename,
+      transactions_removed: removed.transactions,
+      purchase_orders_removed: removed.purchaseOrders,
+      forecasts_removed: removed.forecasts,
+      movements_removed: removed.movements,
+      evaluated: run.evaluated,
+    });
+    return { ok: true, already: false, ...removed };
+  });
+
+/**
+ * PO Inbox: every purchase order line in the workspace with derived
+ * fulfilment status. Any member may read; only owners and admins may change
+ * approval state (setPurchaseOrderApproval).
+ */
+export const getPurchaseOrders = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    const orders = await listPurchaseOrders(supabase, orgId);
+    return { orders, canApprove: role === "owner" || role === "admin" };
+  });
+
+const PO_APPROVAL_ACTIONS = ["approved", "rejected", "needs_review"] as const;
+
+/** Sets a PO's approval state. Restricted to workspace owners and admins. */
+export const setPurchaseOrderApproval = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z
+      .object({
+        poId: z.string().uuid(),
+        approvalStatus: z.enum(PO_APPROVAL_ACTIONS),
+      })
+      .parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId, role } = await resolveOrg(supabase, userId);
+    if (role !== "owner" && role !== "admin") {
+      throw new Error("Only workspace owners and admins can change purchase order approvals.");
+    }
+    const updated = await updatePurchaseOrderApproval(supabase, orgId, data.poId, data.approvalStatus);
+    if (!updated) throw new Error("Purchase order not found in this workspace.");
+    await audit(supabase, orgId, userId, "po.approval_changed", {
+      po_id: data.poId,
+      approval_status: data.approvalStatus,
+    });
+    return { ok: true };
+  });
+
+// ---------------------------------------------------------------------------
+// Scenario Planning
+// ---------------------------------------------------------------------------
+
+const scenarioPayloadSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).nullable().optional(),
+  status: z.enum(["draft", "active", "archived"]).optional(),
+  scope: planningFilterSchema.optional(),
+  assumptions: scenarioAssumptionsSchema,
+});
+
+/** All scenarios for the workspace, each with its latest run marker. */
+export const listScenarios = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const [scenarios, facts, policy] = await Promise.all([
+      listScenarioRecords(supabase, orgId),
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+    ]);
+    return { scenarios, options: filterOptions(facts), policy };
+  });
+
+/** One scenario plus its run history and the dimensions available for scope. */
+export const getScenario = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const [detail, facts, policy] = await Promise.all([
+      getScenarioRecord(supabase, orgId, data.scenarioId),
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+    ]);
+    return { ...detail, options: filterOptions(facts), policy };
+  });
+
+/** Creates a scenario. Any workspace member may define one. */
+export const createScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(scenarioPayloadSchema.parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    if (!hasAssumptions(data.assumptions)) {
+      throw new Error("A scenario needs at least one assumption to be worth running.");
+    }
+    const scenario = await createScenarioRecord(supabase, orgId, userId, {
+      name: data.name,
+      description: data.description ?? null,
+      scope: data.scope ?? {},
+      assumptions: data.assumptions,
+    });
+    await audit(supabase, orgId, userId, "scenario.created", {
+      scenario_id: scenario.id,
+      name: scenario.name,
+    });
+    return { scenario };
+  });
+
+/** Updates a scenario's definition. Runs already recorded stay untouched. */
+export const updateScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({ scenarioId: z.string().uuid(), patch: scenarioPayloadSchema.partial() }).parse,
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    if (data.patch.assumptions && !hasAssumptions(data.patch.assumptions)) {
+      throw new Error("A scenario needs at least one assumption to be worth running.");
+    }
+    const scenario = await updateScenarioRecord(supabase, orgId, data.scenarioId, {
+      ...(data.patch.name !== undefined ? { name: data.patch.name } : {}),
+      ...(data.patch.description !== undefined
+        ? { description: data.patch.description ?? null }
+        : {}),
+      ...(data.patch.status !== undefined ? { status: data.patch.status } : {}),
+      ...(data.patch.scope !== undefined ? { scope: data.patch.scope } : {}),
+      ...(data.patch.assumptions !== undefined ? { assumptions: data.patch.assumptions } : {}),
+    });
+    await audit(supabase, orgId, userId, "scenario.updated", { scenario_id: scenario.id });
+    return { scenario };
+  });
+
+/** Deletes a scenario and its run history. Owner/admin only (enforced by RLS). */
+export const deleteScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    await deleteScenarioRecord(supabase, orgId, data.scenarioId);
+    await audit(supabase, orgId, userId, "scenario.deleted", { scenario_id: data.scenarioId });
+    return { ok: true };
+  });
+
+/**
+ * Executes a scenario against the current data and records the run.
+ *
+ * The planning chain runs twice over the same loaded facts — baseline with
+ * the live policy and recorded inputs, scenario with the stored assumptions —
+ * and only the comparison snapshot is persisted, into scenario_runs. No
+ * canonical or recommendation row is ever touched.
+ */
+export const runScenario = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ scenarioId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    const { scenario } = await getScenarioRecord(supabase, orgId, data.scenarioId);
+    if (!hasAssumptions(scenario.assumptions)) {
+      throw new Error("Add at least one assumption before running this scenario.");
+    }
+    const [facts, policy, signals, openSupply, lastRun] = await Promise.all([
+      loadDemandFacts(supabase, orgId),
+      getEffectivePolicy(supabase, orgId),
+      loadSignals(supabase, orgId),
+      loadOpenSupply(supabase, orgId),
+      getLastRun(supabase, orgId),
+    ]);
+    const result = executeScenario({
+      facts,
+      signals,
+      openSupply,
+      policy,
+      filter: scenario.scope,
+      assumptions: scenario.assumptions,
+    });
+    const run = await insertScenarioRunRecord(supabase, orgId, userId, scenario.id, {
+      assumptions: scenario.assumptions,
+      scope: scenario.scope,
+      result,
+      inputProvenance: {
+        factCount: facts.length,
+        skuCount: signals.length,
+        openPoCount: openSupply.length,
+        lastRecommendationRunAt: lastRun?.generatedAt ?? null,
+        executedAt: new Date().toISOString(),
+      },
+    });
+    await audit(supabase, orgId, userId, "scenario.run", {
+      scenario_id: scenario.id,
+      run_id: run.id,
+      version: run.version,
+    });
+    return { runId: run.id, version: run.version };
+  });
+
+/** The full immutable snapshot of one recorded run. */
+export const getScenarioRun = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ runId: z.string().uuid() }).parse)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { orgId } = await resolveOrg(supabase, userId);
+    return { run: await getScenarioRunRecord(supabase, orgId, data.runId) };
   });

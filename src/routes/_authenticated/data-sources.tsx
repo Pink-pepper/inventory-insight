@@ -1,13 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Upload, Database as DatabaseIcon, Plug, Loader2 } from "lucide-react";
+import { Database as DatabaseIcon, Plug, Loader2 } from "lucide-react";
 import { AppShell, useWorkspace } from "@/components/app-shell";
+import { ImportWizard } from "@/components/import-wizard";
 import { Pill } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { getAuditLog, ingestDataset } from "@/lib/ionic.functions";
+import {
+  deleteImportBatch,
+  getAuditLog,
+  getImportBatches,
+  ingestDataset,
+  setImportBatchActive,
+} from "@/lib/ionic.functions";
 import { num } from "@/lib/format";
 import type { IngestionIssue, IngestionStats } from "@/lib/connectors/types";
 
@@ -18,12 +25,12 @@ export const Route = createFileRoute("/_authenticated/data-sources")({
       {
         name: "description",
         content:
-          "Upload a CSV extract or load the demo dataset. Every source maps into Ionic's canonical inventory model.",
+          "Upload a CSV or Excel extract, or load the demo dataset. Every source maps into Ionic's canonical inventory model.",
       },
       { property: "og:title", content: "Data sources & connectors — Ionic" },
       {
         property: "og:description",
-        content: "CSV upload today, ERP connectors next — all normalized into one internal model.",
+        content: "CSV and Excel today, ERP connectors next — all normalized into one internal model.",
       },
     ],
   }),
@@ -32,26 +39,22 @@ export const Route = createFileRoute("/_authenticated/data-sources")({
 
 const PLANNED = ["Odoo", "SAP Business One", "Microsoft Dynamics", "NetSuite", "Custom API"];
 
-const TEMPLATE = `sku,product_name,category,supplier,supplier_lead_time_days,min_order_qty,unit_cost,on_hand,on_order,safety_stock_days,period_month,units_sold
-SKU-1001,Hex Bolt M8,Fasteners,Northwind Supply,21,100,1.85,420,0,14,2025-01-01,310`;
-
 function DataSourcesPage() {
   const ingest = useServerFn(ingestDataset);
   const auditFn = useServerFn(getAuditLog);
   const queryClient = useQueryClient();
   const { data: workspace } = useWorkspace();
   const { data: auditLog } = useQuery({ queryKey: ["audit"], queryFn: () => auditFn() });
-  const [busy, setBusy] = useState<"demo" | "csv" | null>(null);
+  const [busy, setBusy] = useState<"demo" | null>(null);
   const [issues, setIssues] = useState<IngestionIssue[]>([]);
   const [stats, setStats] = useState<IngestionStats | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
-  async function run(kind: "demo" | "csv", payload: { filename?: string; content?: string } = {}) {
-    setBusy(kind);
+  async function run() {
+    setBusy("demo");
     setIssues([]);
     setStats(null);
     try {
-      const res = await ingest({ data: { source: kind, ...payload } });
+      const res = await ingest({ data: { source: "demo" } });
       setIssues(res.issues);
       setStats(res.stats);
       await queryClient.invalidateQueries();
@@ -62,21 +65,7 @@ function DataSourcesPage() {
       toast.error(e instanceof Error ? e.message : "Ingestion failed");
     } finally {
       setBusy(null);
-      if (fileRef.current) fileRef.current.value = "";
     }
-  }
-
-  async function onFile(file: File): Promise<void> {
-    if (!/\.csv$/i.test(file.name)) {
-      toast.error("Please choose a .csv file.");
-      return;
-    }
-    if (file.size > 5_000_000) {
-      toast.error("File exceeds the 5 MB limit.");
-      return;
-    }
-    const content = await file.text();
-    await run("csv", { filename: file.name, content });
   }
 
   return (
@@ -85,43 +74,11 @@ function DataSourcesPage() {
       description="Connect the systems that describe your stock. Everything is normalized into Ionic's canonical model."
     >
       <div className="space-y-4">
-        <div className="grid gap-3 lg:grid-cols-2">
-          <section className="panel p-5">
-            <div className="flex items-center gap-2">
-              <Upload className="size-4 text-primary" />
-              <h2 className="text-sm font-semibold">CSV upload</h2>
-            </div>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              One row per SKU per month. Column names are matched flexibly (for example{" "}
-              <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">qty_on_hand</code>,{" "}
-              <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">stock</code> and{" "}
-              <code className="rounded-sm bg-muted px-1 py-0.5 text-xs">on_hand</code> all map to the
-              same canonical field).
-            </p>
-            <pre className="mt-3 overflow-x-auto rounded-md border border-border bg-surface-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-              {TEMPLATE}
-            </pre>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onFile(f);
-              }}
-            />
-            <Button
-              className="mt-4"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-              disabled={busy !== null}
-            >
-              {busy === "csv" ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-              Upload CSV
-            </Button>
-          </section>
+        <ImportWizard />
 
+        <ImportedFiles />
+
+        <div className="grid gap-3">
           <section className="panel p-5">
             <div className="flex items-center gap-2">
               <DatabaseIcon className="size-4 text-primary" />
@@ -133,7 +90,7 @@ function DataSourcesPage() {
               deliberate stockout risks and overstock positions.
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => run("demo")} disabled={busy !== null}>
+              <Button size="sm" variant="outline" onClick={() => run()} disabled={busy !== null}>
                 {busy === "demo" ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
@@ -142,7 +99,7 @@ function DataSourcesPage() {
                 {busy === "demo" ? "Loading" : "Load demo data"}
               </Button>
               <Button asChild size="sm" variant="ghost">
-                <Link to="/overview">Open overview</Link>
+                <Link to="/overview">Open dashboard</Link>
               </Button>
             </div>
           </section>
@@ -276,5 +233,165 @@ function DataSourcesPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+type BatchLifecycle = "active" | "inactive" | "deleted";
+
+interface BatchRow {
+  id: string;
+  filename: string;
+  source: string;
+  lifecycle: BatchLifecycle;
+  rowsRead: number;
+  rowsAccepted: number;
+  rowsRejected: number;
+  warnings: number;
+  sheets: { sheet: string; kind: string; rows: number }[];
+  createdAt: string;
+  transactions: number;
+  purchaseOrders: number;
+}
+
+/**
+ * Imported-file lifecycle: every upload is listed with what it contributed.
+ * Owners/admins can deactivate an import (excluded from planning, nothing
+ * deleted) and, once inactive, permanently remove its rows. Batch records are
+ * always retained for audit.
+ */
+function ImportedFiles() {
+  const fetchBatches = useServerFn(getImportBatches);
+  const setActive = useServerFn(setImportBatchActive);
+  const removeBatch = useServerFn(deleteImportBatch);
+  const queryClient = useQueryClient();
+  const { data } = useQuery({ queryKey: ["import-batches"], queryFn: () => fetchBatches() });
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  async function toggle(batch: BatchRow, active: boolean) {
+    setBusyId(batch.id);
+    try {
+      await setActive({ data: { batchId: batch.id, active } });
+      await queryClient.invalidateQueries();
+      toast.success(
+        active
+          ? `${batch.filename} reactivated — its rows are back in planning.`
+          : `${batch.filename} deactivated — excluded from planning, nothing deleted.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not change the import state");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(batch: BatchRow) {
+    if (confirmId !== batch.id) {
+      setConfirmId(batch.id);
+      return;
+    }
+    setConfirmId(null);
+    setBusyId(batch.id);
+    try {
+      const res = await removeBatch({ data: { batchId: batch.id } });
+      await queryClient.invalidateQueries();
+      toast.success(
+        `${batch.filename} deleted — ${num(res.transactions ?? 0)} transactions and ${num(res.purchaseOrders ?? 0)} purchase orders removed.`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not delete the import");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const batches = data?.batches ?? [];
+  const canManage = data?.canManage ?? false;
+
+  return (
+    <section className="panel">
+      <header className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold">Imported files</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Each upload stays reversible: deactivate to exclude it from planning, reactivate to bring
+          it back, delete to remove its rows permanently.
+        </p>
+      </header>
+      <div className="divide-y divide-border">
+        {batches.map((b) => (
+          <div key={b.id} className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2.5 text-sm">
+              <span className="font-medium">{b.filename}</span>
+              <Pill tone={b.lifecycle === "active" ? "hold" : "watch"}>
+                {b.lifecycle === "active" ? "Active" : "Inactive"}
+              </Pill>
+              <span className="text-xs uppercase text-muted-foreground">{b.source}</span>
+              <span className="ml-auto text-xs text-muted-foreground tabular">
+                {new Date(b.createdAt).toLocaleDateString()} · {num(b.rowsAccepted)} rows accepted
+                {b.warnings ? ` · ${num(b.warnings)} warnings` : ""}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {b.sheets.length} sheet{b.sheets.length === 1 ? "" : "s"}
+                {b.sheets.length
+                  ? ` (${b.sheets
+                      .filter((s) => s.kind !== "ignored")
+                      .map((s) => s.sheet)
+                      .slice(0, 4)
+                      .join(", ")}${b.sheets.filter((s) => s.kind !== "ignored").length > 4 ? ", …" : ""})`
+                  : ""}
+              </span>
+              {b.transactions > 0 ? <span>{num(b.transactions)} transactions</span> : null}
+              {b.purchaseOrders > 0 ? <span>{num(b.purchaseOrders)} purchase orders</span> : null}
+              {b.lifecycle === "inactive" ? (
+                <span className="text-status-watch">Excluded from planning and recommendations</span>
+              ) : null}
+            </div>
+            {canManage ? (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {b.lifecycle === "active" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={busyId === b.id}
+                    onClick={() => void toggle(b, false)}
+                  >
+                    {busyId === b.id ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                    Deactivate
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={busyId === b.id}
+                      onClick={() => void toggle(b, true)}
+                    >
+                      {busyId === b.id ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                      Reactivate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={confirmId === b.id ? "destructive" : "ghost"}
+                      className="h-7 text-xs"
+                      disabled={busyId === b.id}
+                      onClick={() => void remove(b)}
+                    >
+                      {confirmId === b.id ? "Confirm permanent delete" : "Delete permanently"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {batches.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">No files imported yet.</p>
+        ) : null}
+      </div>
+    </section>
   );
 }

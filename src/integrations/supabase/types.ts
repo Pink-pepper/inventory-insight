@@ -49,6 +49,73 @@ export type Database = {
           },
         ]
       }
+      channels: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channels_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          created_at: string
+          external_ref: string
+          id: string
+          name: string
+          org_id: string
+          segment: string | null
+        }
+        Insert: {
+          created_at?: string
+          external_ref: string
+          id?: string
+          name: string
+          org_id: string
+          segment?: string | null
+        }
+        Update: {
+          created_at?: string
+          external_ref?: string
+          id?: string
+          name?: string
+          org_id?: string
+          segment?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_sources: {
         Row: {
           connector: Database["public"]["Enums"]["connector_type"]
@@ -93,35 +160,181 @@ export type Database = {
           },
         ]
       }
+      demand_forecasts: {
+        Row: {
+          baseline_qty: number
+          created_at: string
+          high_qty: number | null
+          id: string
+          import_batch_id: string | null
+          location_id: string | null
+          low_qty: number | null
+          method: string | null
+          org_id: string
+          period_month: string
+          product_id: string
+          source_ref: string | null
+          source_row_hash: string
+        }
+        Insert: {
+          baseline_qty: number
+          created_at?: string
+          high_qty?: number | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          low_qty?: number | null
+          method?: string | null
+          org_id: string
+          period_month: string
+          product_id: string
+          source_ref?: string | null
+          source_row_hash: string
+        }
+        Update: {
+          baseline_qty?: number
+          created_at?: string
+          high_qty?: number | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          low_qty?: number | null
+          method?: string | null
+          org_id?: string
+          period_month?: string
+          product_id?: string
+          source_ref?: string | null
+          source_row_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demand_forecasts_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "demand_forecasts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demand_forecasts_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "demand_forecasts_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      import_batches: {
+        Row: {
+          created_at: string
+          created_by: string
+          filename: string
+          id: string
+          org_id: string
+          rows_accepted: number
+          rows_read: number
+          rows_rejected: number
+          sheet_summary: Json
+          source: string
+          status: string
+          warnings: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          filename: string
+          id?: string
+          org_id: string
+          rows_accepted?: number
+          rows_read?: number
+          rows_rejected?: number
+          sheet_summary?: Json
+          source?: string
+          status?: string
+          warnings?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          filename?: string
+          id?: string
+          org_id?: string
+          rows_accepted?: number
+          rows_read?: number
+          rows_rejected?: number
+          sheet_summary?: Json
+          source?: string
+          status?: string
+          warnings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_batches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory: {
         Row: {
           as_of: string
           id: string
+          import_batch_id: string | null
           location: string
+          location_id: string | null
           on_hand: number
           on_order: number
           org_id: string
           product_id: string
+          source_ref: string | null
         }
         Insert: {
           as_of?: string
           id?: string
+          import_batch_id?: string | null
           location?: string
+          location_id?: string | null
           on_hand?: number
           on_order?: number
           org_id: string
           product_id: string
+          source_ref?: string | null
         }
         Update: {
           as_of?: string
           id?: string
+          import_batch_id?: string | null
           location?: string
+          location_id?: string | null
           on_hand?: number
           on_order?: number
           org_id?: string
           product_id?: string
+          source_ref?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
           {
             foreignKeyName: "inventory_org_id_fkey"
             columns: ["org_id"]
@@ -130,11 +343,145 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
             foreignKeyName: "inventory_org_product_fkey"
             columns: ["org_id", "product_id"]
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      inventory_movements: {
+        Row: {
+          cogs: number | null
+          created_at: string
+          currency_code: string | null
+          id: string
+          import_batch_id: string | null
+          location_id: string | null
+          movement_class: Database["public"]["Enums"]["movement_class"]
+          occurred_on: string
+          org_id: string
+          original_amount: number | null
+          product_id: string
+          quantity: number
+          source_reason: string | null
+          source_ref: string | null
+          source_row_hash: string
+          value: number | null
+        }
+        Insert: {
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          movement_class?: Database["public"]["Enums"]["movement_class"]
+          occurred_on: string
+          org_id: string
+          original_amount?: number | null
+          product_id: string
+          quantity: number
+          source_reason?: string | null
+          source_ref?: string | null
+          source_row_hash: string
+          value?: number | null
+        }
+        Update: {
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          movement_class?: Database["public"]["Enums"]["movement_class"]
+          occurred_on?: string
+          org_id?: string
+          original_amount?: number | null
+          product_id?: string
+          quantity?: number
+          source_reason?: string | null
+          source_ref?: string | null
+          source_row_hash?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movements_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "movements_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "movements_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          code: string
+          country: string | null
+          created_at: string
+          id: string
+          name: string
+          org_id: string
+          region: string | null
+          state_province: string | null
+        }
+        Insert: {
+          code: string
+          country?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          org_id: string
+          region?: string | null
+          state_province?: string | null
+        }
+        Update: {
+          code?: string
+          country?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          org_id?: string
+          region?: string | null
+          state_province?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -191,6 +538,86 @@ export type Database = {
         }
         Relationships: []
       }
+      planning_policies: {
+        Row: {
+          created_at: string
+          days_of_cover_target: number | null
+          default_lead_time_days: number | null
+          default_min_order_qty: number | null
+          demand_growth_pct: number | null
+          demand_method: string | null
+          demand_variability: number | null
+          demand_window_months: number | null
+          id: string
+          lead_time_variability_days: number | null
+          minimum_stock_level: number | null
+          order_multiple: number | null
+          org_id: string
+          planning_horizon_days: number | null
+          product_display: string
+          reorder_point_override: number | null
+          safety_stock_days: number | null
+          seasonality_enabled: boolean | null
+          service_level: number | null
+          target_stock_level: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          days_of_cover_target?: number | null
+          default_lead_time_days?: number | null
+          default_min_order_qty?: number | null
+          demand_growth_pct?: number | null
+          demand_method?: string | null
+          demand_variability?: number | null
+          demand_window_months?: number | null
+          id?: string
+          lead_time_variability_days?: number | null
+          minimum_stock_level?: number | null
+          order_multiple?: number | null
+          org_id: string
+          planning_horizon_days?: number | null
+          product_display?: string
+          reorder_point_override?: number | null
+          safety_stock_days?: number | null
+          seasonality_enabled?: boolean | null
+          service_level?: number | null
+          target_stock_level?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          days_of_cover_target?: number | null
+          default_lead_time_days?: number | null
+          default_min_order_qty?: number | null
+          demand_growth_pct?: number | null
+          demand_method?: string | null
+          demand_variability?: number | null
+          demand_window_months?: number | null
+          id?: string
+          lead_time_variability_days?: number | null
+          minimum_stock_level?: number | null
+          order_multiple?: number | null
+          org_id?: string
+          planning_horizon_days?: number | null
+          product_display?: string
+          reorder_point_override?: number | null
+          safety_stock_days?: number | null
+          seasonality_enabled?: boolean | null
+          service_level?: number | null
+          target_stock_level?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string
@@ -205,6 +632,7 @@ export type Database = {
           sku: string
           supplier_id: string | null
           unit_cost: number
+          unit_price: number | null
         }
         Insert: {
           category?: string
@@ -219,6 +647,7 @@ export type Database = {
           sku: string
           supplier_id?: string | null
           unit_cost?: number
+          unit_price?: number | null
         }
         Update: {
           category?: string
@@ -233,6 +662,7 @@ export type Database = {
           sku?: string
           supplier_id?: string | null
           unit_cost?: number
+          unit_price?: number | null
         }
         Relationships: [
           {
@@ -274,45 +704,96 @@ export type Database = {
       }
       purchase_orders: {
         Row: {
+          approval_status: Database["public"]["Enums"]["po_approval_status"]
+          buyer: string | null
           created_at: string
+          currency_code: string | null
           expected_at: string | null
           id: string
+          import_batch_id: string | null
+          location_id: string | null
+          ordered_at: string | null
           org_id: string
+          po_number: string | null
           product_id: string | null
           quantity: number
+          received_at: string | null
+          received_quantity: number
+          source_row_hash: string | null
           status: Database["public"]["Enums"]["po_status"]
           supplier_id: string | null
           unit_cost: number
         }
         Insert: {
+          approval_status?: Database["public"]["Enums"]["po_approval_status"]
+          buyer?: string | null
           created_at?: string
+          currency_code?: string | null
           expected_at?: string | null
           id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          ordered_at?: string | null
           org_id: string
+          po_number?: string | null
           product_id?: string | null
           quantity?: number
+          received_at?: string | null
+          received_quantity?: number
+          source_row_hash?: string | null
           status?: Database["public"]["Enums"]["po_status"]
           supplier_id?: string | null
           unit_cost?: number
         }
         Update: {
+          approval_status?: Database["public"]["Enums"]["po_approval_status"]
+          buyer?: string | null
           created_at?: string
+          currency_code?: string | null
           expected_at?: string | null
           id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          ordered_at?: string | null
           org_id?: string
+          po_number?: string | null
           product_id?: string | null
           quantity?: number
+          received_at?: string | null
+          received_quantity?: number
+          source_row_hash?: string | null
           status?: Database["public"]["Enums"]["po_status"]
           supplier_id?: string | null
           unit_cost?: number
         }
         Relationships: [
           {
+            foreignKeyName: "purchase_orders_import_batch_id_fkey"
+            columns: ["import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_org_batch_fk"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
             foreignKeyName: "purchase_orders_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
           },
           {
             foreignKeyName: "purchase_orders_org_product_fkey"
@@ -401,30 +882,46 @@ export type Database = {
       }
       sales: {
         Row: {
+          cogs: number | null
           id: string
+          import_batch_id: string | null
           org_id: string
           period_month: string
           product_id: string
           quantity: number
           revenue: number
+          source_ref: string | null
         }
         Insert: {
+          cogs?: number | null
           id?: string
+          import_batch_id?: string | null
           org_id: string
           period_month: string
           product_id: string
           quantity?: number
           revenue?: number
+          source_ref?: string | null
         }
         Update: {
+          cogs?: number | null
           id?: string
+          import_batch_id?: string | null
           org_id?: string
           period_month?: string
           product_id?: string
           quantity?: number
           revenue?: number
+          source_ref?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sales_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
           {
             foreignKeyName: "sales_org_id_fkey"
             columns: ["org_id"]
@@ -438,6 +935,222 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      sales_transactions: {
+        Row: {
+          channel_id: string | null
+          cogs: number | null
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          id: string
+          import_batch_id: string | null
+          location_id: string | null
+          occurred_on: string
+          org_id: string
+          original_amount: number | null
+          product_id: string
+          quantity: number
+          region: string | null
+          source_ref: string | null
+          source_row_hash: string
+          state_province: string | null
+          unit_price: number | null
+          value: number | null
+        }
+        Insert: {
+          channel_id?: string | null
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          occurred_on: string
+          org_id: string
+          original_amount?: number | null
+          product_id: string
+          quantity?: number
+          region?: string | null
+          source_ref?: string | null
+          source_row_hash: string
+          state_province?: string | null
+          unit_price?: number | null
+          value?: number | null
+        }
+        Update: {
+          channel_id?: string | null
+          cogs?: number | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          id?: string
+          import_batch_id?: string | null
+          location_id?: string | null
+          occurred_on?: string
+          org_id?: string
+          original_amount?: number | null
+          product_id?: string
+          quantity?: number
+          region?: string | null
+          source_ref?: string | null
+          source_row_hash?: string
+          state_province?: string | null
+          unit_price?: number | null
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_transactions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_batch_fkey"
+            columns: ["org_id", "import_batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_channel_fkey"
+            columns: ["org_id", "channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_customer_fkey"
+            columns: ["org_id", "customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_location_fkey"
+            columns: ["org_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["org_id", "id"]
+          },
+          {
+            foreignKeyName: "sales_tx_org_product_fkey"
+            columns: ["org_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      scenario_runs: {
+        Row: {
+          assumptions: Json
+          baseline_summary: Json
+          created_at: string
+          created_by: string
+          id: string
+          input_provenance: Json
+          org_id: string
+          row_results: Json
+          scenario_id: string
+          scenario_summary: Json
+          scope: Json
+          version: number
+        }
+        Insert: {
+          assumptions: Json
+          baseline_summary: Json
+          created_at?: string
+          created_by: string
+          id?: string
+          input_provenance: Json
+          org_id: string
+          row_results: Json
+          scenario_id: string
+          scenario_summary: Json
+          scope?: Json
+          version: number
+        }
+        Update: {
+          assumptions?: Json
+          baseline_summary?: Json
+          created_at?: string
+          created_by?: string
+          id?: string
+          input_provenance?: Json
+          org_id?: string
+          row_results?: Json
+          scenario_id?: string
+          scenario_summary?: Json
+          scope?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenario_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scenario_runs_org_id_scenario_id_fkey"
+            columns: ["org_id", "scenario_id"]
+            isOneToOne: false
+            referencedRelation: "scenarios"
+            referencedColumns: ["org_id", "id"]
+          },
+        ]
+      }
+      scenarios: {
+        Row: {
+          assumptions: Json
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          org_id: string
+          scope: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assumptions?: Json
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          org_id: string
+          scope?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assumptions?: Json
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          scope?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenarios_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -507,8 +1220,23 @@ export type Database = {
         | "dynamics"
         | "netsuite"
         | "custom_api"
+      movement_class:
+        | "sale"
+        | "consumption"
+        | "sampling"
+        | "promotional"
+        | "service_use"
+        | "damage"
+        | "expiry"
+        | "quality_loss"
+        | "return"
+        | "adjustment"
+        | "transfer"
+        | "assembly"
+        | "other"
       org_role: "owner" | "admin" | "member"
-      po_status: "draft" | "placed" | "received" | "cancelled"
+      po_approval_status: "needs_review" | "approved" | "rejected"
+      po_status: "draft" | "placed" | "received" | "cancelled" | "closed"
       rec_action: "REORDER" | "WATCH" | "HOLD" | "EXCESS"
     }
     CompositeTypes: {
@@ -645,8 +1373,24 @@ export const Constants = {
         "netsuite",
         "custom_api",
       ],
+      movement_class: [
+        "sale",
+        "consumption",
+        "sampling",
+        "promotional",
+        "service_use",
+        "damage",
+        "expiry",
+        "quality_loss",
+        "return",
+        "adjustment",
+        "transfer",
+        "assembly",
+        "other",
+      ],
       org_role: ["owner", "admin", "member"],
-      po_status: ["draft", "placed", "received", "cancelled"],
+      po_approval_status: ["needs_review", "approved", "rejected"],
+      po_status: ["draft", "placed", "received", "cancelled", "closed"],
       rec_action: ["REORDER", "WATCH", "HOLD", "EXCESS"],
     },
   },

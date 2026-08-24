@@ -4,6 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   LayoutDashboard,
   Boxes,
+  TrendingUp,
+  Truck,
+  ShoppingCart,
+  ArrowLeftRight,
+  FlaskConical,
   ClipboardList,
   Database,
   Settings,
@@ -12,19 +17,47 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getWorkspace } from "@/lib/ionic.functions";
+import { formatProductLabel } from "@/lib/domain/planning-policy";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/overview", label: "Dashboard", icon: LayoutDashboard },
   { to: "/inventory", label: "Inventory", icon: Boxes },
-  { to: "/recommendations", label: "Recommendations", icon: ClipboardList },
+  { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
+  { to: "/supply-planning", label: "Supply Plan", icon: Truck },
+  { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
+  { to: "/scenarios", label: "Scenario", icon: FlaskConical },
+  { to: "/recommendations", label: "Analytics", icon: ClipboardList },
+  { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
   { to: "/data-sources", label: "Data Sources", icon: Database },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function useWorkspace() {
   const fn = useServerFn(getWorkspace);
-  return useQuery({ queryKey: ["workspace"], queryFn: () => fn() });
+  return useQuery({
+    queryKey: ["workspace"],
+    retry: false,
+    queryFn: async () => {
+      // The server function requires a bearer token. During sign-out (and
+      // before the Supabase session hydrates) there is none, so skip the call
+      // instead of surfacing a 401 as a fatal error boundary.
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return null;
+      return fn();
+    },
+  });
+}
+
+/**
+ * Single place that decides how a product is labelled, driven by the
+ * organisation's display preference. Screens call this instead of formatting
+ * SKU and name themselves.
+ */
+export function useProductLabel() {
+  const { data } = useWorkspace();
+  const display = data?.planningPolicy.productDisplay ?? "sku_name";
+  return (sku: string, name: string) => formatProductLabel(display, sku, name);
 }
 
 export function AppShell({

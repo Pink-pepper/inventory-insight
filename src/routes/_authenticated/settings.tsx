@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AppShell, Loading, useWorkspace } from "@/components/app-shell";
 import { Pill } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { PlanningPolicyForm } from "@/components/planning-policy-form";
 import { clearWorkspaceData, getAuditLog } from "@/lib/ionic.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -105,6 +106,15 @@ function SettingsPage() {
               order quantities target lead time plus a 30-day review period and are rounded up to the
               supplier MOQ. Anything holding more than 90 days of forward cover is flagged as excess.
             </p>
+          </section>
+
+          <section className="panel p-5 lg:col-span-2">
+            <h2 className="text-sm font-semibold">Planning policy</h2>
+            <p className="mt-1.5 mb-4 text-sm text-muted-foreground">
+              Organisation-specific planning parameters. Anything left blank falls back to the
+              defaults described above, so an unconfigured workspace behaves exactly as before.
+            </p>
+            <PlanningPolicyForm policy={data.planningPolicy} canManage={canManage} />
           </section>
 
           <section className="panel p-5">

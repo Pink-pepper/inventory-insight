@@ -2,11 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { AppShell, EmptyState, TableSkeleton } from "@/components/app-shell";
+import { AppShell, EmptyState, TableSkeleton, useProductLabel } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { getRecommendations } from "@/lib/ionic.functions";
+import { PlanningFilters } from "@/components/planning-filters";
+import { getDemandPlan, getRecommendations } from "@/lib/ionic.functions";
+import type { PlanningFilter } from "@/lib/query/filters";
+import { applyPlanningFilter } from "@/lib/query/filters";
 import { cover, money, num } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -30,24 +32,36 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 function InventoryPage() {
   const fn = useServerFn(getRecommendations);
+  const planFn = useServerFn(getDemandPlan);
+  const label = useProductLabel();
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["recommendations"],
     queryFn: () => fn(),
   });
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("ALL");
+  const [filter, setFilter] = useState<PlanningFilter>({ compare: "prev" });
+
+  // Demand context for the same scope: direction comes from the demand
+  // workspace so both screens explain movement with identical numbers.
+  const { data: demand } = useQuery({
+    queryKey: ["demand-plan", "inventory", filter],
+    queryFn: () => planFn({ data: { filter, dimension: "product" } }),
+  });
+  const directionBySku = useMemo(
+    () => new Map((demand?.plan.skuDirection ?? []).map((d) => [d.sku, d])),
+    [demand],
+  );
 
   const all = useMemo(() => data?.rows ?? [], [data]);
 
-  const categories = useMemo(() => ["ALL", ...new Set(all.map((r) => r.category))], [all]);
-
   const rows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return all
-      .filter((r) => category === "ALL" || r.category === category)
-      .filter((r) => term === "" || r.sku.toLowerCase().includes(term) || r.name.toLowerCase().includes(term))
-      .sort((a, b) => b.inventoryValue - a.inventoryValue);
-  }, [all, search, category]);
+    const filterable = all.map((r) => ({
+      ...r,
+      locationCodes: r.locations.map((l) => l.location),
+    }));
+    return applyPlanningFilter(filterable, filter).sort(
+      (a, b) => b.inventoryValue - a.inventoryValue,
+    );
+  }, [all, filter]);
 
   return (
     <AppShell
@@ -78,25 +92,16 @@ function InventoryPage() {
         />
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search SKU or product"
-              className="h-9 max-w-xs"
-              maxLength={80}
+          {demand ? (
+            <PlanningFilters
+              filter={filter}
+              options={demand.options}
+              onChange={setFilter}
+              showGrain={false}
+              showCompare
             />
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
-            >
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c === "ALL" ? "All categories" : c}
-                </option>
-              ))}
-            </select>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
             <span className="ml-auto text-xs text-muted-foreground tabular">
               {rows.length} SKUs · {money(rows.reduce((s, r) => s + r.inventoryValue, 0))} at cost
             </span>
@@ -113,6 +118,7 @@ function InventoryPage() {
                   <th className="px-3 py-2.5 text-right font-medium">On hand</th>
                   <th className="px-3 py-2.5 text-right font-medium">On order</th>
                   <th className="px-3 py-2.5 font-medium">Locations</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Demand</th>
                   <th className="px-3 py-2.5 text-right font-medium">Cover</th>
                   <th className="px-3 py-2.5 text-right font-medium">Unit cost</th>
                   <th className="px-3 py-2.5 text-right font-medium">Value</th>
@@ -131,7 +137,7 @@ function InventoryPage() {
                         {r.sku}
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5">{r.name}</td>
+                    <td className="px-3 py-2.5">{label(r.sku, r.name)}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{r.category}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{r.supplierName}</td>
                     <td className="px-3 py-2.5 text-right tabular">{num(r.onHand)}</td>
@@ -144,6 +150,13 @@ function InventoryPage() {
                         : r.locations.length === 1
                           ? r.locations[0]!.location
                           : `${r.locations.length} locations`}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular text-muted-foreground">
+                      {directionBySku.get(r.sku)?.changePct == null
+                        ? "—"
+                        : `${directionBySku.get(r.sku)!.changePct! > 0 ? "+" : ""}${
+                            directionBySku.get(r.sku)!.changePct
+                          }%`}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular">{cover(r.daysOfCover)}</td>
                     <td className="px-3 py-2.5 text-right tabular">{money(r.unitCost, 2)}</td>

@@ -6,6 +6,8 @@
  * anything about CSV column names or ERP schemas.
  */
 
+import type { MovementClass } from "./movement";
+
 export type ConnectorType = "csv" | "odoo" | "sap" | "dynamics" | "netsuite" | "custom_api";
 
 export type RecommendationAction = "REORDER" | "WATCH" | "HOLD" | "EXCESS";
@@ -24,6 +26,8 @@ export interface CanonicalProduct {
   name: string;
   category: string;
   unitCost: number;
+  /** Selling price, when the source provides it. Never invented. */
+  unitPrice?: number | null;
   supplierCode: string;
   leadTimeDays: number | null;
   minOrderQty: number | null;
@@ -45,6 +49,124 @@ export interface CanonicalSale {
   periodMonth: string; // ISO date, first of month
   quantity: number;
   revenue: number;
+  /** Cost of goods sold for the period, when the source provides it. */
+  cogs?: number | null;
+}
+
+/** A customer as any source describes it. */
+export interface CanonicalCustomer {
+  externalRef: string;
+  name: string;
+  segment?: string | null;
+}
+
+/** A route to market as any source describes it. */
+export interface CanonicalChannel {
+  code: string;
+  name: string;
+}
+
+/**
+ * A single demand line at day grain. The finest fact Ionic stores; monthly
+ * sales are derived from these when transactions are supplied.
+ */
+export interface CanonicalTransaction {
+  sku: string;
+  occurredOn: string; // ISO date
+  quantity: number;
+  value?: number | null;
+  unitPrice?: number | null;
+  cogs?: number | null;
+  customerRef?: string | null;
+  channelCode?: string | null;
+  location?: string | null;
+  region?: string | null;
+  stateProvince?: string | null;
+  currencyCode?: string | null;
+  originalAmount?: number | null;
+  /** Document/line identifier from the source system, when present. */
+  sourceRef?: string | null;
+  /** Deterministic fingerprint of the business fields, for re-import detection. */
+  rowHash: string;
+}
+
+/**
+ * A single purchase order line as any source describes it. Supply Planning
+ * phases the outstanding quantity by its expected date; nothing is inferred
+ * when the date is absent — the supply is reported as unscheduled.
+ */
+export interface CanonicalPurchaseOrder {
+  /** Purchase order reference from the source system, when present. */
+  poRef: string | null;
+  status: PurchaseOrderStatus;
+  /**
+   * Approval signal carried by the source data, when one exists. Distinct
+   * from the fulfilment lifecycle — a PO can be approved and still open.
+   */
+  approvalStatus: PurchaseOrderApprovalStatus;
+  sku: string;
+  supplierCode: string | null;
+  supplierName: string | null;
+  quantity: number;
+  receivedQuantity: number;
+  /** Line unit cost; persistence falls back to the product's recorded cost. */
+  unitCost: number | null;
+  orderedAt: string | null;
+  expectedAt: string | null;
+  /** Actual delivery date, when the source reports one. */
+  receivedAt: string | null;
+  /** Receiving location code, matched to the workspace's locations. */
+  location: string | null;
+  currencyCode: string | null;
+  buyer: string | null;
+  /** Deterministic fingerprint of the business fields, for re-import detection. */
+  rowHash: string;
+}
+
+/**
+ * Forward-looking demand for a SKU in a future period. Forecasts are their
+ * own canonical domain: they are never folded into sales history, and they
+ * stay distinct from Scenario Planning assumptions.
+ */
+export interface CanonicalForecast {
+  sku: string;
+  periodMonth: string; // ISO date, first of month
+  baselineQty: number;
+  lowQty?: number | null;
+  highQty?: number | null;
+  method?: string | null;
+  location: string;
+  sourceRef?: string | null;
+  /** Deterministic fingerprint (SKU, period, location) for re-import detection. */
+  rowHash: string;
+}
+
+/**
+ * A single non-sales stock movement at day grain (consumption, sampling,
+ * damage, return, adjustment, transfer…). The class is derived from the
+ * verbatim source reason, which is always kept; direction comes from the
+ * signed quantity, never from a user-supplied sign convention. A value of 0
+ * is valid and distinct from null (value not supplied).
+ *
+ * Stored as a record only — no planning engine consumes movements yet; the
+ * per-class semantics live in `@/lib/domain/movement`.
+ */
+export interface CanonicalMovement {
+  sku: string;
+  occurredOn: string; // ISO date
+  /** Signed: negative = stock leaving, positive = stock arriving. */
+  quantity: number;
+  movementClass: MovementClass;
+  /** Verbatim reason/type from the source system, never normalised away. */
+  sourceReason?: string | null;
+  location?: string | null;
+  sourceRef?: string | null;
+  value?: number | null;
+  currencyCode?: string | null;
+  originalAmount?: number | null;
+  cogs?: number | null;
+  /** Deterministic fingerprint of the business fields, for re-import detection. */
+  rowHash: string;
 }
 
 /** A complete ingestion payload produced by any connector. */
@@ -53,6 +175,12 @@ export interface CanonicalDataset {
   products: CanonicalProduct[];
   inventory: CanonicalInventory[];
   sales: CanonicalSale[];
+  customers?: CanonicalCustomer[];
+  channels?: CanonicalChannel[];
+  transactions?: CanonicalTransaction[];
+  purchaseOrders?: CanonicalPurchaseOrder[];
+  forecasts?: CanonicalForecast[];
+  movements?: CanonicalMovement[];
 }
 
 /** A stock position at a single physical location. */
@@ -105,7 +233,13 @@ export interface AuditEvent {
   occurredAt: string;
 }
 
-export type PurchaseOrderStatus = "draft" | "placed" | "received" | "cancelled";
+/**
+ * PO lifecycle (fulfilment-side vocabulary). Approval state is a separate
+ * dimension — never fold the two into one status.
+ */
+export type PurchaseOrderStatus = "draft" | "placed" | "received" | "closed" | "cancelled";
+
+export type PurchaseOrderApprovalStatus = "needs_review" | "approved" | "rejected";
 
 /** An inbound order against a SKU. */
 export interface PurchaseOrder {
@@ -116,6 +250,31 @@ export interface PurchaseOrder {
   unitCost: number;
   status: PurchaseOrderStatus;
   expectedAt: string | null;
+}
+
+/** A stored purchase order line as the PO Inbox talks about it. */
+export interface PurchaseOrderRecord {
+  id: string;
+  poNumber: string | null;
+  sku: string | null;
+  productName: string | null;
+  supplierName: string | null;
+  supplierCode: string | null;
+  quantity: number;
+  receivedQuantity: number;
+  outstanding: number;
+  unitCost: number;
+  currencyCode: string | null;
+  status: PurchaseOrderStatus;
+  approvalStatus: PurchaseOrderApprovalStatus;
+  orderedAt: string | null;
+  expectedAt: string | null;
+  receivedAt: string | null;
+  locationCode: string | null;
+  locationName: string | null;
+  buyer: string | null;
+  importBatchId: string | null;
+  createdAt: string;
 }
 
 /** Provenance of a stored recommendation run. */

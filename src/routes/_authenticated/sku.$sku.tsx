@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AppShell, EmptyState, Loading } from "@/components/app-shell";
+import { AppShell, EmptyState, Loading, useProductLabel } from "@/components/app-shell";
 import { AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ function Facts({ heading, items }: { heading: string; items: string[] }) {
 function SkuPage() {
   const { sku } = Route.useParams();
   const fn = useServerFn(getSkuDetail);
+  const productLabel = useProductLabel();
   const { data, isLoading } = useQuery({
     queryKey: ["sku", sku],
     queryFn: () => fn({ data: { sku } }),
@@ -81,7 +82,7 @@ function SkuPage() {
 
   return (
     <AppShell
-      title={data ? `${data.sku} · ${data.name}` : sku}
+      title={data ? productLabel(data.sku, data.name) : sku}
       description={data ? `${data.category} · supplied by ${data.supplierName}` : "SKU analysis"}
       actions={
         <Button asChild variant="outline" size="sm">

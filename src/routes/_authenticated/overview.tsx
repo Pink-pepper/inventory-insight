@@ -22,13 +22,13 @@ import { compactMoney, money, num } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/overview")({
   head: () => ({
     meta: [
-      { title: "Inventory health overview — Ionic" },
+      { title: "Dashboard — Ionic" },
       {
         name: "description",
         content:
           "Executive view of stock cover, reorder exposure, excess working capital and recommended purchasing requirement.",
       },
-      { property: "og:title", content: "Inventory health overview — Ionic" },
+      { property: "og:title", content: "Dashboard — Ionic" },
       {
         property: "og:description",
         content: "Stock cover, reorder exposure and excess working capital at a glance.",
@@ -101,11 +101,11 @@ function OverviewPage() {
 
   return (
     <AppShell
-      title="Overview"
+      title="Dashboard"
       description="Inventory health and purchasing exposure across the workspace."
       actions={
         <Button asChild variant="outline" size="sm">
-          <Link to="/recommendations">View recommendations</Link>
+          <Link to="/recommendations">View analytics</Link>
         </Button>
       }
     >
