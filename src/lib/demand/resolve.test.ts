@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, test } from "bun:test";
 import { resolveDemandBook, type HistoryBaselinePoint } from "./resolve";
 import type { DemandSignalRecord } from "@/lib/domain/commercial";
 
@@ -29,7 +29,7 @@ const history: HistoryBaselinePoint[] = [
 ];
 
 describe("demand book resolution", () => {
-  it("does not sum an opportunity, its quotation and its LPO", () => {
+  test("does not sum an opportunity, its quotation and its LPO", () => {
     const rows = resolveDemandBook({
       history: [],
       signals: [
@@ -44,7 +44,7 @@ describe("demand book resolution", () => {
     expect(rows[0]!.superseded).toHaveLength(2);
   });
 
-  it("groups duplicate evidence for the same customer, product and period", () => {
+  test("groups duplicate evidence for the same customer, product and period", () => {
     const rows = resolveDemandBook({
       history: [],
       signals: [
@@ -56,7 +56,7 @@ describe("demand book resolution", () => {
     expect(rows[0]!.superseded[0]!.signalId).toBe("r1");
   });
 
-  it("lets commitments consume the historical baseline rather than stack on it", () => {
+  test("lets commitments consume the historical baseline rather than stack on it", () => {
     const rows = resolveDemandBook({
       history,
       signals: [sig({ id: "l1", source: "lpo", certainty: "committed", quantity: 60 })],
@@ -66,7 +66,7 @@ describe("demand book resolution", () => {
     expect(rows[0]!.resolvedQty).toBe(100);
   });
 
-  it("never lets the baseline go negative when commitments exceed history", () => {
+  test("never lets the baseline go negative when commitments exceed history", () => {
     const rows = resolveDemandBook({
       history,
       signals: [sig({ id: "l1", source: "lpo", certainty: "committed", quantity: 180 })],
@@ -75,7 +75,7 @@ describe("demand book resolution", () => {
     expect(rows[0]!.resolvedQty).toBe(180);
   });
 
-  it("counts uncertain opportunities as incremental upside at their stated confidence", () => {
+  test("counts uncertain opportunities as incremental upside at their stated confidence", () => {
     const rows = resolveDemandBook({
       history,
       signals: [
@@ -86,7 +86,7 @@ describe("demand book resolution", () => {
     expect(rows[0]!.resolvedQty).toBe(110);
   });
 
-  it("ignores lost records and market signals as quantities but keeps history", () => {
+  test("ignores lost records and market signals as quantities but keeps history", () => {
     const rows = resolveDemandBook({
       history,
       signals: [
@@ -97,7 +97,7 @@ describe("demand book resolution", () => {
     expect(rows[0]!.resolvedQty).toBe(100);
   });
 
-  it("is deterministic regardless of input order", () => {
+  test("is deterministic regardless of input order", () => {
     const signals = [
       sig({ id: "a", source: "opportunity", certainty: "active", quantity: 10 }),
       sig({ id: "b", source: "lpo", certainty: "committed", quantity: 20 }),

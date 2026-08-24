@@ -47,6 +47,7 @@ import { certaintyRank, isCommitted, isLiveStatus } from "@/lib/domain/commercia
 export interface HistoryBaselinePoint {
   productId: string;
   sku: string;
+  productName?: string;
   period: string;
   quantity: number;
 }
@@ -214,7 +215,7 @@ export function resolveDemandBook({ signals, history }: ResolveInput): ResolvedD
   };
 
   for (const point of history) {
-    const cell = cellOf(point.productId, point.sku, point.sku, point.period);
+    const cell = cellOf(point.productId, point.sku, point.productName ?? point.sku, point.period);
     cell.baseline += point.quantity;
   }
 

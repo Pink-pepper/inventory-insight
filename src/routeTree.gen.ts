@@ -23,7 +23,9 @@ import { Route as AuthenticatedRecommendationsRouteImport } from './routes/_auth
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSupplyPlanningRouteImport } from './routes/_authenticated/supply-planning'
 import { Route as AuthenticatedBusinessIndexRouteImport } from './routes/_authenticated/business.index'
+import { Route as AuthenticatedBusinessCustomersRouteImport } from './routes/_authenticated/business.customers'
 import { Route as AuthenticatedBusinessPipelineRouteImport } from './routes/_authenticated/business.pipeline'
+import { Route as AuthenticatedBusinessSignalsRouteImport } from './routes/_authenticated/business.signals'
 import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
@@ -103,10 +105,22 @@ const AuthenticatedBusinessIndexRoute =
     path: '/business/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedBusinessCustomersRoute =
+  AuthenticatedBusinessCustomersRouteImport.update({
+    id: '/business/customers',
+    path: '/business/customers',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBusinessPipelineRoute =
   AuthenticatedBusinessPipelineRouteImport.update({
     id: '/business/pipeline',
     path: '/business/pipeline',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedBusinessSignalsRoute =
+  AuthenticatedBusinessSignalsRouteImport.update({
+    id: '/business/signals',
+    path: '/business/signals',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedScenariosIndexRoute =
@@ -140,7 +154,9 @@ export interface FileRoutesByFullPath {
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
+  '/business/customers': typeof AuthenticatedBusinessCustomersRoute
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
+  '/business/signals': typeof AuthenticatedBusinessSignalsRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/business/': typeof AuthenticatedBusinessIndexRoute
@@ -159,7 +175,9 @@ export interface FileRoutesByTo {
   '/recommendations': typeof AuthenticatedRecommendationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/supply-planning': typeof AuthenticatedSupplyPlanningRoute
+  '/business/customers': typeof AuthenticatedBusinessCustomersRoute
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
+  '/business/signals': typeof AuthenticatedBusinessSignalsRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/business': typeof AuthenticatedBusinessIndexRoute
@@ -180,7 +198,9 @@ export interface FileRoutesById {
   '/_authenticated/recommendations': typeof AuthenticatedRecommendationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/supply-planning': typeof AuthenticatedSupplyPlanningRoute
+  '/_authenticated/business/customers': typeof AuthenticatedBusinessCustomersRoute
   '/_authenticated/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
+  '/_authenticated/business/signals': typeof AuthenticatedBusinessSignalsRoute
   '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/_authenticated/business/': typeof AuthenticatedBusinessIndexRoute
@@ -201,7 +221,9 @@ export interface FileRouteTypes {
     | '/recommendations'
     | '/settings'
     | '/supply-planning'
+    | '/business/customers'
     | '/business/pipeline'
+    | '/business/signals'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
     | '/business/'
@@ -220,7 +242,9 @@ export interface FileRouteTypes {
     | '/recommendations'
     | '/settings'
     | '/supply-planning'
+    | '/business/customers'
     | '/business/pipeline'
+    | '/business/signals'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
     | '/business'
@@ -240,7 +264,9 @@ export interface FileRouteTypes {
     | '/_authenticated/recommendations'
     | '/_authenticated/settings'
     | '/_authenticated/supply-planning'
+    | '/_authenticated/business/customers'
     | '/_authenticated/business/pipeline'
+    | '/_authenticated/business/signals'
     | '/_authenticated/scenarios/$scenarioId'
     | '/_authenticated/sku/$sku'
     | '/_authenticated/business/'
@@ -354,11 +380,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBusinessIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/business/customers': {
+      id: '/_authenticated/business/customers'
+      path: '/business/customers'
+      fullPath: '/business/customers'
+      preLoaderRoute: typeof AuthenticatedBusinessCustomersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/business/pipeline': {
       id: '/_authenticated/business/pipeline'
       path: '/business/pipeline'
       fullPath: '/business/pipeline'
       preLoaderRoute: typeof AuthenticatedBusinessPipelineRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/business/signals': {
+      id: '/_authenticated/business/signals'
+      path: '/business/signals'
+      fullPath: '/business/signals'
+      preLoaderRoute: typeof AuthenticatedBusinessSignalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/scenarios/': {
@@ -395,7 +435,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRecommendationsRoute: typeof AuthenticatedRecommendationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSupplyPlanningRoute: typeof AuthenticatedSupplyPlanningRoute
+  AuthenticatedBusinessCustomersRoute: typeof AuthenticatedBusinessCustomersRoute
   AuthenticatedBusinessPipelineRoute: typeof AuthenticatedBusinessPipelineRoute
+  AuthenticatedBusinessSignalsRoute: typeof AuthenticatedBusinessSignalsRoute
   AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
   AuthenticatedBusinessIndexRoute: typeof AuthenticatedBusinessIndexRoute
@@ -412,7 +454,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRecommendationsRoute: AuthenticatedRecommendationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSupplyPlanningRoute: AuthenticatedSupplyPlanningRoute,
+  AuthenticatedBusinessCustomersRoute: AuthenticatedBusinessCustomersRoute,
   AuthenticatedBusinessPipelineRoute: AuthenticatedBusinessPipelineRoute,
+  AuthenticatedBusinessSignalsRoute: AuthenticatedBusinessSignalsRoute,
   AuthenticatedScenariosScenarioIdRoute: AuthenticatedScenariosScenarioIdRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
   AuthenticatedBusinessIndexRoute: AuthenticatedBusinessIndexRoute,
