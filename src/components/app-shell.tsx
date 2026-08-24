@@ -18,7 +18,12 @@ import {
   Handshake,
   Users,
   Radar,
+  Ship,
+  PackageCheck,
+  Coins,
 } from "lucide-react";
+
+
 import { supabase } from "@/integrations/supabase/client";
 import { getWorkspace } from "@/lib/ionic.functions";
 import { formatProductLabel } from "@/lib/domain/planning-policy";
@@ -60,13 +65,22 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Supply & data",
+    label: "Supply",
     items: [
       { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
+      { to: "/supply", label: "Shipments", icon: Ship },
+      { to: "/supply/inbound", label: "Inbound", icon: PackageCheck },
+      { to: "/supply/economics", label: "Landed Costs", icon: Coins },
+    ],
+  },
+  {
+    label: "Data",
+    items: [
       { to: "/data-sources", label: "Data Sources", icon: Database },
       { to: "/settings", label: "Settings", icon: Settings },
     ],
   },
+
 ];
 
 const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);

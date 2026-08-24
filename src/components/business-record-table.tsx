@@ -29,6 +29,7 @@ import {
   promoteToDemandBook,
   saveBusinessRecord,
 } from "@/lib/business.functions";
+import { deleteSupplyRecordFn, saveSupplyRecordFn } from "@/lib/supply.functions";
 import { cn } from "@/lib/utils";
 
 export type FieldType = "text" | "textarea" | "number" | "percent" | "date" | "select";
@@ -65,8 +66,16 @@ export type BusinessTable =
   | "market_signals"
   | "demand_signals";
 
+export type SupplyTableName =
+  | "supplier_products"
+  | "cost_components"
+  | "shipments"
+  | "shipment_lines";
+
 export interface BusinessRecordTableProps<T extends { id: string }> {
-  table: BusinessTable;
+  table: BusinessTable | SupplyTableName;
+  /** Which write surface backs this table. Defaults to the commercial one. */
+  domain?: "business" | "supply";
   /** Query keys to refresh after any write. */
   invalidate: string[][];
   rows: T[];
@@ -81,6 +90,7 @@ export interface BusinessRecordTableProps<T extends { id: string }> {
   /** When set, rows can be promoted into the Demand Book. */
   promoteAs?: "requirement" | "opportunity" | "quotation" | "customer_order";
 }
+
 
 const isBlank = (v: unknown) => v === "" || v === undefined || v === null;
 
@@ -104,6 +114,7 @@ function initialForm(fields: FieldSpec[], values?: Record<string, unknown>) {
 
 export function BusinessRecordTable<T extends { id: string }>({
   table,
+  domain = "business",
   invalidate,
   rows,
   columns,
@@ -116,9 +127,13 @@ export function BusinessRecordTable<T extends { id: string }>({
   promoteAs,
 }: BusinessRecordTableProps<T>) {
   const queryClient = useQueryClient();
-  const saveFn = useServerFn(saveBusinessRecord);
-  const deleteFn = useServerFn(deleteBusinessRecord);
+  const saveBusiness = useServerFn(saveBusinessRecord);
+  const deleteBusiness = useServerFn(deleteBusinessRecord);
+  const saveSupply = useServerFn(saveSupplyRecordFn);
+  const deleteSupply = useServerFn(deleteSupplyRecordFn);
   const promoteFn = useServerFn(promoteToDemandBook);
+  const saveFn = domain === "supply" ? saveSupply : saveBusiness;
+  const deleteFn = domain === "supply" ? deleteSupply : deleteBusiness;
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string | null; form: Record<string, string> } | null>(
@@ -141,13 +156,14 @@ export function BusinessRecordTable<T extends { id: string }>({
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => deleteFn({ data: { table, id } }),
+    mutationFn: (id: string) => deleteFn({ data: { table, id } as never }),
     onSuccess: () => {
       toast.success("Deleted");
       refresh();
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not delete this record."),
   });
+
 
   const promote = useMutation({
     mutationFn: (id: string) =>
