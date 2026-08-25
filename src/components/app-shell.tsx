@@ -14,24 +14,76 @@ import {
   Settings,
   LogOut,
   Loader2,
+  BookOpen,
+  Handshake,
+  Users,
+  Radar,
+  Ship,
+  PackageCheck,
+  Coins,
 } from "lucide-react";
+
+
 import { supabase } from "@/integrations/supabase/client";
 import { getWorkspace } from "@/lib/ionic.functions";
 import { formatProductLabel } from "@/lib/domain/planning-policy";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { to: "/overview", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/inventory", label: "Inventory", icon: Boxes },
-  { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
-  { to: "/supply-planning", label: "Supply Plan", icon: Truck },
-  { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
-  { to: "/scenarios", label: "Scenario", icon: FlaskConical },
-  { to: "/recommendations", label: "Analytics", icon: ClipboardList },
-  { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
-  { to: "/data-sources", label: "Data Sources", icon: Database },
-  { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+/**
+ * Navigation follows the distributor's working order: what the business has
+ * sold or is about to sell, then what that means for stock and supply.
+ */
+type NavItem = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
+  {
+    label: null,
+    items: [{ to: "/overview", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Business",
+    items: [
+      { to: "/business", label: "Demand Book", icon: BookOpen },
+      { to: "/business/pipeline", label: "Pipeline", icon: Handshake },
+      { to: "/business/customers", label: "Customers", icon: Users },
+      { to: "/business/signals", label: "Market Signals", icon: Radar },
+    ],
+  },
+  {
+    label: "Planning",
+    items: [
+      { to: "/inventory", label: "Inventory", icon: Boxes },
+      { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
+      { to: "/supply-planning", label: "Supply Plan", icon: Truck },
+      { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
+      { to: "/scenarios", label: "Scenario", icon: FlaskConical },
+      { to: "/recommendations", label: "Analytics", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Supply",
+    items: [
+      { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
+      { to: "/supply", label: "Shipments", icon: Ship },
+      { to: "/supply/inbound", label: "Inbound", icon: PackageCheck },
+      { to: "/supply/economics", label: "Landed Costs", icon: Coins },
+    ],
+  },
+  {
+    label: "Data",
+    items: [
+      { to: "/data-sources", label: "Data Sources", icon: Database },
+      { to: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+
+];
+
+const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 export function useWorkspace() {
   const fn = useServerFn(getWorkspace);
@@ -109,25 +161,36 @@ export function AppShell({
           </p>
         </div>
 
-        <nav className="flex-1 space-y-0.5 p-3">
-          {NAV.map((item) => {
-            const active = pathname === item.to || pathname.startsWith(item.to + "/");
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                )}
-              >
-                <item.icon className="size-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+          {NAV_GROUPS.map((group, i) => (
+            <div key={group.label ?? `group-${i}`} className="space-y-0.5">
+              {group.label ? (
+                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">
+                  {group.label}
+                </p>
+              ) : null}
+              {group.items.map((item) => {
+                const active =
+                  pathname === item.to ||
+                  (item.to !== "/business" && pathname.startsWith(item.to + "/"));
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                    )}
+                  >
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-sidebar-border p-3">

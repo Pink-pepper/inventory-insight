@@ -25,6 +25,8 @@ import {
   type DemandMethod,
 } from "@/lib/domain/planning-policy";
 import { evaluateAll, resolveEngineConfig } from "@/lib/engine/inventory-engine";
+import type { ShipmentStatus } from "@/lib/domain/supply-chain";
+import { phaseLineByShipments, type ShipmentAllocation } from "@/lib/supply/shipment-phasing";
 import { rowHash } from "@/lib/ingestion/validate";
 import type { DemandFact } from "@/lib/demand/series";
 import type { PlanningFilter } from "@/lib/query/filters";
@@ -1049,11 +1051,55 @@ export interface OpenSupplyLine {
   orderedAt: string | null;
   /** Receiving location code, when the PO declares one. */
   locationCode: string | null;
+  /** Set when this segment of the order arrives on a recorded shipment. */
+  shipmentId?: string | null;
+  shipmentReference?: string | null;
+  shipmentStatus?: ShipmentStatus | null;
+}
+
+/** Shipment allocations against open purchase orders, for supply phasing. */
+async function loadShipmentAllocations(supabase: Db, orgId: string): Promise<ShipmentAllocation[]> {
+  const { data, error } = await supabase
+    .from("shipment_lines")
+    // Two FKs reach shipments (id and the tenant-composite); name the one we mean.
+    .select(
+      "purchase_order_id, quantity, shipments!shipment_lines_shipment_id_fkey(id, reference, status, eta, revised_eta, arrived_on)",
+    )
+    .eq("org_id", orgId)
+    .not("purchase_order_id", "is", null);
+  if (error) throw new Error(error.message);
+  const out: ShipmentAllocation[] = [];
+  for (const row of data ?? []) {
+    const s = row.shipments as unknown as {
+      id: string;
+      reference: string;
+      status: ShipmentStatus;
+      eta: string | null;
+      revised_eta: string | null;
+      arrived_on: string | null;
+    } | null;
+    if (!s || !row.purchase_order_id) continue;
+    out.push({
+      poId: row.purchase_order_id,
+      shipmentId: s.id,
+      shipmentReference: s.reference,
+      status: s.status,
+      quantity: Number(row.quantity) || 0,
+      eta: s.eta,
+      revisedEta: s.revised_eta,
+      arrivedOn: s.arrived_on,
+    });
+  }
+  return out;
 }
 
 /**
  * Open purchase orders (placed, with an outstanding quantity). Received and
  * cancelled orders are history, not supply, and are never returned here.
+ *
+ * Outstanding quantity is phased by shipment where shipments exist, so a PO
+ * arriving in three shipments becomes three dated supply segments. Quantity
+ * not allocated to any shipment keeps the order's own expected date.
  */
 export async function loadOpenSupply(supabase: Db, orgId: string): Promise<OpenSupplyLine[]> {
   const inactive = await inactiveBatchIds(supabase, orgId);
@@ -1065,9 +1111,12 @@ export async function loadOpenSupply(supabase: Db, orgId: string): Promise<OpenS
   if (inactive.length > 0) {
     query = query.not("import_batch_id", "in", `(${inactive.join(",")})`);
   }
-  const { data, error } = await query;
+  const [{ data, error }, allocations] = await Promise.all([
+    query,
+    loadShipmentAllocations(supabase, orgId),
+  ]);
   if (error) throw new Error(error.message);
-  return (data ?? [])
+  const lines = (data ?? [])
     .map((row) => {
       const quantity = Number(row.quantity) || 0;
       const receivedQuantity = Math.min(quantity, Math.max(0, Number(row.received_quantity) || 0));
@@ -1086,10 +1135,23 @@ export async function loadOpenSupply(supabase: Db, orgId: string): Promise<OpenS
         expectedAt: row.expected_at,
         orderedAt: row.ordered_at,
         locationCode: location?.code ?? null,
-      };
+      } satisfies OpenSupplyLine;
     })
     .filter((line) => line.outstanding > 0 && line.sku !== "");
+
+  if (allocations.length === 0) return lines;
+  return lines.flatMap((line) =>
+    phaseLineByShipments(line, allocations).map((segment) => ({
+      ...segment.line,
+      outstanding: segment.quantity,
+      expectedAt: segment.expectedAt,
+      shipmentId: segment.shipmentId,
+      shipmentReference: segment.shipmentReference,
+      shipmentStatus: segment.shipmentStatus,
+    })),
+  );
 }
+
 
 /**
  * Every purchase order line for the workspace, any lifecycle state — the PO
