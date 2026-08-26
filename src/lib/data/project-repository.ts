@@ -102,7 +102,7 @@ export async function saveProject(
   values: Record<string, unknown>,
 ): Promise<string> {
   if (id) {
-    const { error } = await supabase.from("projects").update(values).eq("org_id", orgId).eq("id", id);
+    const { error } = await supabase.from("projects").update(values as never).eq("org_id", orgId).eq("id", id);
     fail(error);
     return id;
   }
@@ -129,7 +129,7 @@ export async function saveProjectProduct(
   if (id) {
     const { error } = await supabase
       .from("project_products")
-      .update(values)
+      .update(values as never)
       .eq("org_id", orgId)
       .eq("id", id);
     fail(error);

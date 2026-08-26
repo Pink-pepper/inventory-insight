@@ -88,7 +88,7 @@ export async function saveBusinessPlan(
   if (id) {
     const { error } = await supabase
       .from("business_plans")
-      .update(values)
+      .update(values as never)
       .eq("org_id", orgId)
       .eq("id", id);
     fail(error);
@@ -117,7 +117,7 @@ export async function saveBusinessPlanLine(
   if (id) {
     const { error } = await supabase
       .from("business_plan_lines")
-      .update(values)
+      .update(values as never)
       .eq("org_id", orgId)
       .eq("id", id);
     fail(error);

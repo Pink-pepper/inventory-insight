@@ -216,7 +216,7 @@ export async function updateProductMaster(
   id: string,
   values: Record<string, unknown>,
 ) {
-  const { error } = await supabase.from("products").update(values).eq("org_id", orgId).eq("id", id);
+  const { error } = await supabase.from("products").update(values as never).eq("org_id", orgId).eq("id", id);
   fail(error);
 }
 
@@ -226,6 +226,6 @@ export async function updateSupplierMaster(
   id: string,
   values: Record<string, unknown>,
 ) {
-  const { error } = await supabase.from("suppliers").update(values).eq("org_id", orgId).eq("id", id);
+  const { error } = await supabase.from("suppliers").update(values as never).eq("org_id", orgId).eq("id", id);
   fail(error);
 }
