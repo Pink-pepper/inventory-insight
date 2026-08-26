@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthenticatedBusinessPlanRouteImport } from './routes/_authenticated/business-plan'
 import { Route as AuthenticatedDataSourcesRouteImport } from './routes/_authenticated/data-sources'
 import { Route as AuthenticatedDemandPlanningRouteImport } from './routes/_authenticated/demand-planning'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
@@ -55,6 +56,12 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedBusinessPlanRoute =
+  AuthenticatedBusinessPlanRouteImport.update({
+    id: '/business-plan',
+    path: '/business-plan',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDataSourcesRoute =
   AuthenticatedDataSourcesRouteImport.update({
     id: '/data-sources',
@@ -187,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/business-plan': typeof AuthenticatedBusinessPlanRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/distribution': typeof AuthenticatedDistributionRoute
@@ -214,6 +222,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/business-plan': typeof AuthenticatedBusinessPlanRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/distribution': typeof AuthenticatedDistributionRoute
@@ -243,6 +252,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/business-plan': typeof AuthenticatedBusinessPlanRoute
   '/_authenticated/data-sources': typeof AuthenticatedDataSourcesRoute
   '/_authenticated/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
@@ -272,6 +282,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/business-plan'
     | '/data-sources'
     | '/demand-planning'
     | '/distribution'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/business-plan'
     | '/data-sources'
     | '/demand-planning'
     | '/distribution'
@@ -327,6 +339,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/reset-password'
+    | '/_authenticated/business-plan'
     | '/_authenticated/data-sources'
     | '/_authenticated/demand-planning'
     | '/_authenticated/distribution'
@@ -387,6 +400,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/business-plan': {
+      id: '/_authenticated/business-plan'
+      path: '/business-plan'
+      fullPath: '/business-plan'
+      preLoaderRoute: typeof AuthenticatedBusinessPlanRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/data-sources': {
       id: '/_authenticated/data-sources'
@@ -546,6 +566,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedBusinessPlanRoute: typeof AuthenticatedBusinessPlanRoute
   AuthenticatedDataSourcesRoute: typeof AuthenticatedDataSourcesRoute
   AuthenticatedDemandPlanningRoute: typeof AuthenticatedDemandPlanningRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
@@ -571,6 +592,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedBusinessPlanRoute: AuthenticatedBusinessPlanRoute,
   AuthenticatedDataSourcesRoute: AuthenticatedDataSourcesRoute,
   AuthenticatedDemandPlanningRoute: AuthenticatedDemandPlanningRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
