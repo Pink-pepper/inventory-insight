@@ -23,18 +23,23 @@ You're right: about half of the approved pass shipped. Here is what is verified 
 ## What gets built now
 
 ### A. Control Tower
+
 New `src/lib/control-tower/signals.ts` deriving prioritised rows from data already loaded: shipment ETA slips, projection cover breaches, ageing quotations, landed cost above quoted price, demand shifts, slow movers, unmatched committed demand, market signals. Categories Urgent / Attention / Opportunity / Information / Healthy. `/overview` is rebuilt as that briefing: each row expands to what happened, why it matters, the evidence and a link to the record. No new tables, no fabricated signals.
 
 ### B. Navigation and IA
+
 Regroup to Workspace · Business (Customers, Projects, Demand Book, Market Signals) · Inventory (Inventory, Products, Suppliers) · Planning (Demand Plan, Supply Plan, Business Plan, Scenarios) · Supply (Procurement, Shipments, Inbound) · Analytics · Data. Business and Inventory become collapsible. Distribution becomes a "Coming soon" entry under Planning; Landed Costs leaves the sidebar and is reached from Procurement, Products, Shipments and POs. Pipeline folds into Projects. All existing URLs keep working.
 
 ### C. Language, Customers, Signals
+
 Demand Book wording only: Total expected demand / Expected demand / Potential demand; resolver untouched. Customers gains plain-language relationship summaries and drill-down into that customer's projects, quotations, orders, sales and signals. Market Signals is restyled as a grouped, expandable intelligence feed that never alters numbers.
 
 ### D. Quantity, UOM and currency
+
 Inventory and demand tables adopt In stock (units) · Pack size · Quantity · Days of cover · Expected stock, with a display-level g/kg/MT/L switch using product pack factors only. A workspace display-currency setting with manual rates, applied in one shared formatting layer across every money surface and clearly labelled as a display conversion — source amounts are never overwritten.
 
 ### E. Visual system and homepage
+
 Token changes in `src/styles.css`: background `#F7F6F1`, primary `#0F4F48`, strong text `#1B281C`, warm cream surfaces, sparing semantic accents, lighter borders and quieter tables. Satoshi loaded via a `<link>` in the root route. Homepage rebuilt on the new system with the Distribution "Coming soon" block and both CTAs.
 
 ## Technical notes
@@ -46,3 +51,9 @@ Token changes in `src/styles.css`: background `#F7F6F1`, primary `#0F4F48`, stro
 ## Sequencing
 
 Given the size, this runs in three stages so you can review as it lands: (1) Control Tower + navigation, (2) language, Customers, Signals, UOM and currency, (3) visual system and homepage.
+
+Proceed with the three-stage continuation exactly as described.
+
+One important preservation requirement: Requirements and Opportunities are no longer primary Pipeline navigation items, but they must remain available as demand sources/types in the Demand Book and accessible from relevant Project detail. Do not delete or migrate away those underlying records.
+
+Otherwise, proceed with stages 1 → 2 → 3. Do not rebuild Projects, Products, Suppliers, Business Plan, currency schema, or UOM helpers that are already in place. No publish/deploy.
