@@ -184,35 +184,60 @@ export function AppShell({
         </div>
 
         <nav className="flex-1 space-y-4 overflow-y-auto p-3">
-          {NAV_GROUPS.map((group, i) => (
-            <div key={group.label ?? `group-${i}`} className="space-y-0.5">
-              {group.label ? (
-                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">
-                  {group.label}
-                </p>
-              ) : null}
-              {group.items.map((item) => {
-                const active =
-                  pathname === item.to ||
-                  (item.to !== "/business" && pathname.startsWith(item.to + "/"));
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
-                      active
-                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                    )}
-                  >
-                    <item.icon className="size-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+          {NAV_GROUPS.map((group, i) => {
+            const collapsed = group.label ? closed.includes(group.label) : false;
+            return (
+              <div key={group.label ?? `group-${i}`} className="space-y-0.5">
+                {group.label ? (
+                  group.collapsible ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.label!)}
+                      aria-expanded={!collapsed}
+                      className="flex w-full items-center gap-1 px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45 hover:text-sidebar-accent-foreground"
+                    >
+                      <ChevronDown
+                        className={cn("size-3 transition-transform", collapsed && "-rotate-90")}
+                      />
+                      {group.label}
+                    </button>
+                  ) : (
+                    <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/45">
+                      {group.label}
+                    </p>
+                  )
+                ) : null}
+                {collapsed
+                  ? null
+                  : group.items.map((item) => {
+                      const active =
+                        pathname === item.to ||
+                        (item.to !== "/business" && pathname.startsWith(item.to + "/"));
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm transition-colors",
+                            active
+                              ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                          )}
+                        >
+                          <item.icon className="size-4" />
+                          <span className="flex-1">{item.label}</span>
+                          {item.soon ? (
+                            <span className="rounded-sm bg-sidebar-accent/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sidebar-foreground/70">
+                              Soon
+                            </span>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+              </div>
+            );
+          })}
+
         </nav>
 
         <div className="border-t border-sidebar-border p-3">
