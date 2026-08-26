@@ -49,6 +49,146 @@ export type Database = {
           },
         ]
       }
+      business_plan_lines: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          expected_gross_profit: number
+          expected_quantity: number
+          expected_revenue: number
+          id: string
+          label: string | null
+          notes: string | null
+          org_id: string
+          plan_id: string
+          product_id: string | null
+          source: string
+          supplier_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          expected_gross_profit?: number
+          expected_quantity?: number
+          expected_revenue?: number
+          id?: string
+          label?: string | null
+          notes?: string | null
+          org_id: string
+          plan_id: string
+          product_id?: string | null
+          source?: string
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          expected_gross_profit?: number
+          expected_quantity?: number
+          expected_revenue?: number
+          id?: string
+          label?: string | null
+          notes?: string | null
+          org_id?: string
+          plan_id?: string
+          product_id?: string | null
+          source?: string
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_plan_lines_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_plan_lines_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_plan_lines_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "business_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_plan_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_plan_lines_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_plans: {
+        Row: {
+          created_at: string
+          created_by: string
+          currency_code: string | null
+          direction: string
+          gross_profit_target: number
+          id: string
+          name: string
+          notes: string | null
+          org_id: string
+          plan_year: number
+          revenue_target: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          currency_code?: string | null
+          direction?: string
+          gross_profit_target?: number
+          id?: string
+          name: string
+          notes?: string | null
+          org_id: string
+          plan_year: number
+          revenue_target?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          currency_code?: string | null
+          direction?: string
+          gross_profit_target?: number
+          id?: string
+          name?: string
+          notes?: string | null
+          org_id?: string
+          plan_year?: number
+          revenue_target?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_plans_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       channels: {
         Row: {
           code: string
@@ -240,12 +380,16 @@ export type Database = {
           created_at: string
           currency_code: string | null
           customer_id: string | null
+          delivered_on: string | null
+          delivered_quantity: number
           id: string
           notes: string | null
+          ordered_on: string | null
           org_id: string
           period_end: string | null
           period_start: string
           product_id: string | null
+          project_id: string | null
           quantity: number
           quotation_id: string | null
           reference: string | null
@@ -260,12 +404,16 @@ export type Database = {
           created_at?: string
           currency_code?: string | null
           customer_id?: string | null
+          delivered_on?: string | null
+          delivered_quantity?: number
           id?: string
           notes?: string | null
+          ordered_on?: string | null
           org_id: string
           period_end?: string | null
           period_start: string
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           quotation_id?: string | null
           reference?: string | null
@@ -280,12 +428,16 @@ export type Database = {
           created_at?: string
           currency_code?: string | null
           customer_id?: string | null
+          delivered_on?: string | null
+          delivered_quantity?: number
           id?: string
           notes?: string | null
+          ordered_on?: string | null
           org_id?: string
           period_end?: string | null
           period_start?: string
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           quotation_id?: string | null
           reference?: string | null
@@ -314,6 +466,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -946,6 +1105,7 @@ export type Database = {
           org_id: string
           probability: number
           product_id: string | null
+          project_id: string | null
           quantity: number
           requirement_id: string | null
           status: Database["public"]["Enums"]["commercial_status"]
@@ -965,6 +1125,7 @@ export type Database = {
           org_id: string
           probability?: number
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           requirement_id?: string | null
           status?: Database["public"]["Enums"]["commercial_status"]
@@ -984,6 +1145,7 @@ export type Database = {
           org_id?: string
           probability?: number
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           requirement_id?: string | null
           status?: Database["public"]["Enums"]["commercial_status"]
@@ -1011,6 +1173,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -1053,6 +1222,8 @@ export type Database = {
           demand_method: string | null
           demand_variability: number | null
           demand_window_months: number | null
+          display_currency: string | null
+          fx_rates: Json
           id: string
           lead_time_variability_days: number | null
           minimum_stock_level: number | null
@@ -1076,6 +1247,8 @@ export type Database = {
           demand_method?: string | null
           demand_variability?: number | null
           demand_window_months?: number | null
+          display_currency?: string | null
+          fx_rates?: Json
           id?: string
           lead_time_variability_days?: number | null
           minimum_stock_level?: number | null
@@ -1099,6 +1272,8 @@ export type Database = {
           demand_method?: string | null
           demand_variability?: number | null
           demand_window_months?: number | null
+          display_currency?: string | null
+          fx_rates?: Json
           id?: string
           lead_time_variability_days?: number | null
           minimum_stock_level?: number | null
@@ -1129,12 +1304,17 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          is_hazardous: boolean | null
           lead_time_days: number | null
           min_order_qty: number | null
           name: string
           org_id: string
+          pack_size: number | null
+          pack_uom: string | null
+          regulatory_notes: string | null
           safety_stock_days: number
           sku: string
+          specification: string | null
           supplier_id: string | null
           unit_cost: number
           unit_price: number | null
@@ -1144,12 +1324,17 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_hazardous?: boolean | null
           lead_time_days?: number | null
           min_order_qty?: number | null
           name: string
           org_id: string
+          pack_size?: number | null
+          pack_uom?: string | null
+          regulatory_notes?: string | null
           safety_stock_days?: number
           sku: string
+          specification?: string | null
           supplier_id?: string | null
           unit_cost?: number
           unit_price?: number | null
@@ -1159,12 +1344,17 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_hazardous?: boolean | null
           lead_time_days?: number | null
           min_order_qty?: number | null
           name?: string
           org_id?: string
+          pack_size?: number | null
+          pack_uom?: string | null
+          regulatory_notes?: string | null
           safety_stock_days?: number
           sku?: string
+          specification?: string | null
           supplier_id?: string | null
           unit_cost?: number
           unit_price?: number | null
@@ -1206,6 +1396,178 @@ export type Database = {
           id?: string
         }
         Relationships: []
+      }
+      project_activities: {
+        Row: {
+          created_at: string
+          detail: string | null
+          id: string
+          kind: string
+          occurred_on: string
+          org_id: string
+          project_id: string
+          summary: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          kind: string
+          occurred_on?: string
+          org_id: string
+          project_id: string
+          summary: string
+        }
+        Update: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          kind?: string
+          occurred_on?: string
+          org_id?: string
+          project_id?: string
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_activities_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_activities_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_products: {
+        Row: {
+          created_at: string
+          currency_code: string | null
+          expected_unit_price: number | null
+          id: string
+          notes: string | null
+          org_id: string
+          product_id: string | null
+          project_id: string
+          quantity: number | null
+          unit: string | null
+        }
+        Insert: {
+          created_at?: string
+          currency_code?: string | null
+          expected_unit_price?: number | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          product_id?: string | null
+          project_id: string
+          quantity?: number | null
+          unit?: string | null
+        }
+        Update: {
+          created_at?: string
+          currency_code?: string | null
+          expected_unit_price?: number | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          product_id?: string | null
+          project_id?: string
+          quantity?: number | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_products_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_products_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          expected_close: string | null
+          expected_value: number | null
+          id: string
+          name: string
+          notes: string | null
+          org_id: string
+          owner: string | null
+          stage: Database["public"]["Enums"]["project_stage"]
+          status: Database["public"]["Enums"]["commercial_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_close?: string | null
+          expected_value?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          org_id: string
+          owner?: string | null
+          stage?: Database["public"]["Enums"]["project_stage"]
+          status?: Database["public"]["Enums"]["commercial_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          expected_close?: string | null
+          expected_value?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          org_id?: string
+          owner?: string | null
+          stage?: Database["public"]["Enums"]["project_stage"]
+          status?: Database["public"]["Enums"]["commercial_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       purchase_orders: {
         Row: {
@@ -1329,6 +1691,7 @@ export type Database = {
           opportunity_id: string | null
           org_id: string
           product_id: string | null
+          project_id: string | null
           quantity: number
           reference: string | null
           status: Database["public"]["Enums"]["commercial_status"]
@@ -1349,6 +1712,7 @@ export type Database = {
           opportunity_id?: string | null
           org_id: string
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           reference?: string | null
           status?: Database["public"]["Enums"]["commercial_status"]
@@ -1369,6 +1733,7 @@ export type Database = {
           opportunity_id?: string | null
           org_id?: string
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           reference?: string | null
           status?: Database["public"]["Enums"]["commercial_status"]
@@ -1404,6 +1769,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -1488,6 +1860,7 @@ export type Database = {
           period_end: string | null
           period_start: string
           product_id: string | null
+          project_id: string | null
           quantity: number
           status: Database["public"]["Enums"]["commercial_status"]
           unit: string | null
@@ -1503,6 +1876,7 @@ export type Database = {
           period_end?: string | null
           period_start: string
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           status?: Database["public"]["Enums"]["commercial_status"]
           unit?: string | null
@@ -1518,6 +1892,7 @@ export type Database = {
           period_end?: string | null
           period_start?: string
           product_id?: string | null
+          project_id?: string | null
           quantity?: number
           status?: Database["public"]["Enums"]["commercial_status"]
           unit?: string | null
@@ -1543,6 +1918,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requirements_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -2089,35 +2471,50 @@ export type Database = {
       suppliers: {
         Row: {
           code: string | null
+          country: string | null
           created_at: string
           external_ref: string | null
           id: string
+          incoterm: string | null
+          is_active: boolean
           lead_time_days: number
           min_order_qty: number
           name: string
+          notes: string | null
           org_id: string
+          payment_terms: string | null
           reliability: number
         }
         Insert: {
           code?: string | null
+          country?: string | null
           created_at?: string
           external_ref?: string | null
           id?: string
+          incoterm?: string | null
+          is_active?: boolean
           lead_time_days?: number
           min_order_qty?: number
           name: string
+          notes?: string | null
           org_id: string
+          payment_terms?: string | null
           reliability?: number
         }
         Update: {
           code?: string | null
+          country?: string | null
           created_at?: string
           external_ref?: string | null
           id?: string
+          incoterm?: string | null
+          is_active?: boolean
           lead_time_days?: number
           min_order_qty?: number
           name?: string
+          notes?: string | null
           org_id?: string
+          payment_terms?: string | null
           reliability?: number
         }
         Relationships: [
@@ -2197,6 +2594,18 @@ export type Database = {
       org_role: "owner" | "admin" | "member"
       po_approval_status: "needs_review" | "approved" | "rejected"
       po_status: "draft" | "placed" | "received" | "cancelled" | "closed"
+      project_stage:
+        | "identified"
+        | "engaged"
+        | "requirement_confirmed"
+        | "rfq"
+        | "sampling"
+        | "negotiation"
+        | "customer_decision"
+        | "won"
+        | "fulfilment"
+        | "delivered"
+        | "lost"
       rec_action: "REORDER" | "WATCH" | "HOLD" | "EXCESS"
       shipment_status:
         | "planned"
@@ -2391,6 +2800,19 @@ export const Constants = {
       org_role: ["owner", "admin", "member"],
       po_approval_status: ["needs_review", "approved", "rejected"],
       po_status: ["draft", "placed", "received", "cancelled", "closed"],
+      project_stage: [
+        "identified",
+        "engaged",
+        "requirement_confirmed",
+        "rfq",
+        "sampling",
+        "negotiation",
+        "customer_decision",
+        "won",
+        "fulfilment",
+        "delivered",
+        "lost",
+      ],
       rec_action: ["REORDER", "WATCH", "HOLD", "EXCESS"],
       shipment_status: [
         "planned",
