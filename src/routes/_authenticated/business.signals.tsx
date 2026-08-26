@@ -1,12 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { AppShell, Loading } from "@/components/app-shell";
 import { Pill } from "@/components/status-badge";
 import { BusinessRecordTable, type FieldSpec } from "@/components/business-record-table";
 import { getBusinessBook } from "@/lib/business.functions";
-import { MARKET_SIGNAL_KINDS, MARKET_SIGNAL_LABEL } from "@/lib/domain/commercial";
+import {
+  MARKET_SIGNAL_KINDS,
+  MARKET_SIGNAL_LABEL,
+  type MarketSignalImpact,
+  type MarketSignalRecord,
+} from "@/lib/domain/commercial";
+
 
 export const Route = createFileRoute("/_authenticated/business/signals")({
   head: () => ({
