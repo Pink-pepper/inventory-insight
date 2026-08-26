@@ -8,7 +8,7 @@ import { Pill } from "@/components/status-badge";
 import { BusinessRecordTable, type FieldSpec } from "@/components/business-record-table";
 import { getBusinessBook } from "@/lib/business.functions";
 import { getProjects } from "@/lib/projects.functions";
-import { PROJECT_STAGE_LABEL } from "@/lib/domain/project";
+import { STAGE_LABEL } from "@/lib/domain/project";
 import { money, num } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/business/customers")({
@@ -164,7 +164,7 @@ function CustomersPage() {
         r.projects.push({
           id: p.id,
           name: p.name,
-          stage: PROJECT_STAGE_LABEL[p.stage] ?? p.stage,
+          stage: STAGE_LABEL[p.stage] ?? p.stage,
           value: p.expectedValue,
         });
       }
