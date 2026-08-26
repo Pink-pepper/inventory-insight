@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_authenticated/business/")({
       {
         name: "description",
         content:
-          "One resolved view of forward demand: commitments, run rate and weighted upside, with the evidence behind every number.",
+          "One view of forward demand: commitments, expected demand and potential demand, with the evidence behind every number.",
       },
       { property: "og:title", content: "Demand Book — Ionic" },
       {
@@ -75,7 +75,7 @@ function DemandBookPage() {
   return (
     <AppShell
       title="Demand Book"
-      description="The single resolved demand picture. Commitments replace the run rate rather than stacking on top of it."
+      description="One demand picture. Commitments replace expected demand rather than stacking on top of it."
     >
       {isLoading ? (
         <Loading label="Resolving demand" />
@@ -97,9 +97,9 @@ function DemandBookPage() {
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-4">
             <Metric label="Committed" value={totals.committed} hint="Orders and LPOs you must serve" />
-            <Metric label="Run rate" value={totals.baseline} hint="History not already claimed by a commitment" />
-            <Metric label="Weighted upside" value={totals.potential} hint="Probability-adjusted pipeline" />
-            <Metric label="Resolved demand" value={totals.resolved} hint="What planning consumes" emphasis />
+            <Metric label="Expected demand" value={totals.baseline} hint="History not already claimed by a commitment" />
+            <Metric label="Potential demand" value={totals.potential} hint="Probability-adjusted pipeline" />
+            <Metric label="Total expected demand" value={totals.resolved} hint="What planning consumes" emphasis />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -125,9 +125,9 @@ function DemandBookPage() {
               <span>Product</span>
               <span>Period</span>
               <span className="text-right">Committed</span>
-              <span className="text-right">Run rate</span>
-              <span className="text-right">Upside</span>
-              <span className="text-right">Resolved</span>
+              <span className="text-right">Expected</span>
+              <span className="text-right">Potential</span>
+              <span className="text-right">Total expected</span>
             </div>
 
             {rows.map((row) => {
@@ -173,7 +173,7 @@ function DemandBookPage() {
   );
 }
 
-/** Every resolved number expands into the exact signals that produced it. */
+/** Every total expands into the exact signals that produced it. */
 function Evidence({ row }: { row: ResolvedDemandRow }) {
   return (
     <div className="space-y-4 border-t border-border bg-surface-muted/40 px-10 py-4">

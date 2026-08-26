@@ -85,7 +85,7 @@ function BusinessPlanPage() {
   return (
     <AppShell
       title="Business Plan"
-      description="Targets versus contribution lines. Bottom-up seeds from the resolved Demand Book; top-down allocates a target across the same lines."
+      description="Targets versus contribution lines. Bottom-up seeds from the Demand Book; top-down allocates a target across the same lines."
       actions={
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

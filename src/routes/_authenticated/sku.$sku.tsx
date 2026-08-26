@@ -211,7 +211,7 @@ function SkuPage() {
                 <Row
                   label="Safety stock"
                   value={num(data.safetyStock)}
-                  hint={`${data.safetyStockDays}-day buffer at current run rate`}
+                  hint={`${data.safetyStockDays}-day buffer at current expected demand`}
                 />
                 <Row
                   label="Reorder point"
