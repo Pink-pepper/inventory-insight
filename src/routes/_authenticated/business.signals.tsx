@@ -212,8 +212,11 @@ function SignalsPage() {
             supplier_id: s.supplierId,
             detail: s.detail,
           })}
-        />
+            />
+          </section>
+        </div>
       )}
+
     </AppShell>
   );
 }
