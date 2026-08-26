@@ -264,6 +264,8 @@ export async function getPlanningPolicy(
     demandVariability: numOrNull(data.demand_variability),
     leadTimeVariabilityDays: numOrNull(data.lead_time_variability_days),
     productDisplay: (data.product_display as ProductDisplay) ?? "sku_name",
+    displayCurrency: (data.display_currency as string | null) ?? null,
+    fxRates: (data.fx_rates as Record<string, number> | null) ?? {},
   };
 }
 
@@ -298,6 +300,8 @@ export async function savePlanningPolicy(
       demand_variability: policy.demandVariability,
       lead_time_variability_days: policy.leadTimeVariabilityDays,
       product_display: policy.productDisplay,
+      display_currency: policy.displayCurrency,
+      fx_rates: policy.fxRates ?? {},
     },
     { onConflict: "org_id" },
   );

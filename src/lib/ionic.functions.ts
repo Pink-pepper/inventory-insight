@@ -407,6 +407,8 @@ const planningPolicyInput = z.object({
   demandVariability: optNum(100),
   leadTimeVariabilityDays: optNum(365),
   productDisplay: z.enum(["sku", "name", "sku_name"]),
+  displayCurrency: z.string().trim().min(3).max(3).nullable().optional(),
+  fxRates: z.record(z.string(), z.number().positive().max(1_000_000)).optional(),
 });
 
 export const getPlanningPolicy = createServerFn({ method: "GET" })

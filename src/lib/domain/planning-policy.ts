@@ -47,6 +47,10 @@ export interface StoredPlanningParameters {
 
 export interface PlanningPolicy extends ConsumedPlanningParameters, StoredPlanningParameters {
   productDisplay: ProductDisplay;
+  /** Currency the workspace reads figures in. Stored amounts are never rewritten. */
+  displayCurrency: string | null;
+  /** Manual rates: units of the display currency per 1 unit of the base currency. */
+  fxRates: Record<string, number>;
 }
 
 /** Field names that currently change recommendation output. */
@@ -78,6 +82,8 @@ export const EMPTY_PLANNING_POLICY: PlanningPolicy = {
   demandVariability: null,
   leadTimeVariabilityDays: null,
   productDisplay: "sku_name",
+  displayCurrency: null,
+  fxRates: {},
 };
 
 /** How a product is labelled across the application. */
