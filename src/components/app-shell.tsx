@@ -21,6 +21,10 @@ import {
   Ship,
   PackageCheck,
   Coins,
+  Briefcase,
+  Package,
+  Factory,
+  Target,
 } from "lucide-react";
 
 
@@ -48,6 +52,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     label: "Business",
     items: [
       { to: "/business", label: "Demand Book", icon: BookOpen },
+      { to: "/projects", label: "Projects", icon: Briefcase },
       { to: "/business/pipeline", label: "Pipeline", icon: Handshake },
       { to: "/business/customers", label: "Customers", icon: Users },
       { to: "/business/signals", label: "Market Signals", icon: Radar },
@@ -60,6 +65,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
       { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
       { to: "/supply-planning", label: "Supply Plan", icon: Truck },
       { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
+      { to: "/business-plan", label: "Business Plan", icon: Target },
       { to: "/scenarios", label: "Scenario", icon: FlaskConical },
       { to: "/recommendations", label: "Analytics", icon: ClipboardList },
     ],
@@ -71,6 +77,13 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
       { to: "/supply", label: "Shipments", icon: Ship },
       { to: "/supply/inbound", label: "Inbound", icon: PackageCheck },
       { to: "/supply/economics", label: "Landed Costs", icon: Coins },
+    ],
+  },
+  {
+    label: "Master data",
+    items: [
+      { to: "/master/products", label: "Products", icon: Package },
+      { to: "/master/suppliers", label: "Suppliers", icon: Factory },
     ],
   },
   {

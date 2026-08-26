@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthenticatedBusinessPlanRouteImport } from './routes/_authenticated/business-plan'
 import { Route as AuthenticatedDataSourcesRouteImport } from './routes/_authenticated/data-sources'
 import { Route as AuthenticatedDemandPlanningRouteImport } from './routes/_authenticated/demand-planning'
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
@@ -26,6 +27,9 @@ import { Route as AuthenticatedBusinessIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedBusinessCustomersRouteImport } from './routes/_authenticated/business.customers'
 import { Route as AuthenticatedBusinessPipelineRouteImport } from './routes/_authenticated/business.pipeline'
 import { Route as AuthenticatedBusinessSignalsRouteImport } from './routes/_authenticated/business.signals'
+import { Route as AuthenticatedMasterProductsRouteImport } from './routes/_authenticated/master.products'
+import { Route as AuthenticatedMasterSuppliersRouteImport } from './routes/_authenticated/master.suppliers'
+import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects.index'
 import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
@@ -52,6 +56,12 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedBusinessPlanRoute =
+  AuthenticatedBusinessPlanRouteImport.update({
+    id: '/business-plan',
+    path: '/business-plan',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDataSourcesRoute =
   AuthenticatedDataSourcesRouteImport.update({
     id: '/data-sources',
@@ -126,6 +136,24 @@ const AuthenticatedBusinessSignalsRoute =
     path: '/business/signals',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedMasterProductsRoute =
+  AuthenticatedMasterProductsRouteImport.update({
+    id: '/master/products',
+    path: '/master/products',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMasterSuppliersRoute =
+  AuthenticatedMasterSuppliersRouteImport.update({
+    id: '/master/suppliers',
+    path: '/master/suppliers',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedProjectsIndexRoute =
+  AuthenticatedProjectsIndexRouteImport.update({
+    id: '/projects/',
+    path: '/projects/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedScenariosIndexRoute =
   AuthenticatedScenariosIndexRouteImport.update({
     id: '/scenarios/',
@@ -166,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/business-plan': typeof AuthenticatedBusinessPlanRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/distribution': typeof AuthenticatedDistributionRoute
@@ -178,11 +207,14 @@ export interface FileRoutesByFullPath {
   '/business/customers': typeof AuthenticatedBusinessCustomersRoute
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/business/signals': typeof AuthenticatedBusinessSignalsRoute
+  '/master/products': typeof AuthenticatedMasterProductsRoute
+  '/master/suppliers': typeof AuthenticatedMasterSuppliersRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
   '/supply/inbound': typeof AuthenticatedSupplyInboundRoute
   '/business/': typeof AuthenticatedBusinessIndexRoute
+  '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/scenarios/': typeof AuthenticatedScenariosIndexRoute
   '/supply/': typeof AuthenticatedSupplyIndexRoute
 }
@@ -190,6 +222,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/business-plan': typeof AuthenticatedBusinessPlanRoute
   '/data-sources': typeof AuthenticatedDataSourcesRoute
   '/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/distribution': typeof AuthenticatedDistributionRoute
@@ -202,11 +235,14 @@ export interface FileRoutesByTo {
   '/business/customers': typeof AuthenticatedBusinessCustomersRoute
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/business/signals': typeof AuthenticatedBusinessSignalsRoute
+  '/master/products': typeof AuthenticatedMasterProductsRoute
+  '/master/suppliers': typeof AuthenticatedMasterSuppliersRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
   '/supply/inbound': typeof AuthenticatedSupplyInboundRoute
   '/business': typeof AuthenticatedBusinessIndexRoute
+  '/projects': typeof AuthenticatedProjectsIndexRoute
   '/scenarios': typeof AuthenticatedScenariosIndexRoute
   '/supply': typeof AuthenticatedSupplyIndexRoute
 }
@@ -216,6 +252,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/business-plan': typeof AuthenticatedBusinessPlanRoute
   '/_authenticated/data-sources': typeof AuthenticatedDataSourcesRoute
   '/_authenticated/demand-planning': typeof AuthenticatedDemandPlanningRoute
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
@@ -228,11 +265,14 @@ export interface FileRoutesById {
   '/_authenticated/business/customers': typeof AuthenticatedBusinessCustomersRoute
   '/_authenticated/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/_authenticated/business/signals': typeof AuthenticatedBusinessSignalsRoute
+  '/_authenticated/master/products': typeof AuthenticatedMasterProductsRoute
+  '/_authenticated/master/suppliers': typeof AuthenticatedMasterSuppliersRoute
   '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/_authenticated/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
   '/_authenticated/supply/inbound': typeof AuthenticatedSupplyInboundRoute
   '/_authenticated/business/': typeof AuthenticatedBusinessIndexRoute
+  '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
   '/_authenticated/supply/': typeof AuthenticatedSupplyIndexRoute
 }
@@ -242,6 +282,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/business-plan'
     | '/data-sources'
     | '/demand-planning'
     | '/distribution'
@@ -254,11 +295,14 @@ export interface FileRouteTypes {
     | '/business/customers'
     | '/business/pipeline'
     | '/business/signals'
+    | '/master/products'
+    | '/master/suppliers'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
     | '/supply/economics'
     | '/supply/inbound'
     | '/business/'
+    | '/projects/'
     | '/scenarios/'
     | '/supply/'
   fileRoutesByTo: FileRoutesByTo
@@ -266,6 +310,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/business-plan'
     | '/data-sources'
     | '/demand-planning'
     | '/distribution'
@@ -278,11 +323,14 @@ export interface FileRouteTypes {
     | '/business/customers'
     | '/business/pipeline'
     | '/business/signals'
+    | '/master/products'
+    | '/master/suppliers'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
     | '/supply/economics'
     | '/supply/inbound'
     | '/business'
+    | '/projects'
     | '/scenarios'
     | '/supply'
   id:
@@ -291,6 +339,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/reset-password'
+    | '/_authenticated/business-plan'
     | '/_authenticated/data-sources'
     | '/_authenticated/demand-planning'
     | '/_authenticated/distribution'
@@ -303,11 +352,14 @@ export interface FileRouteTypes {
     | '/_authenticated/business/customers'
     | '/_authenticated/business/pipeline'
     | '/_authenticated/business/signals'
+    | '/_authenticated/master/products'
+    | '/_authenticated/master/suppliers'
     | '/_authenticated/scenarios/$scenarioId'
     | '/_authenticated/sku/$sku'
     | '/_authenticated/supply/economics'
     | '/_authenticated/supply/inbound'
     | '/_authenticated/business/'
+    | '/_authenticated/projects/'
     | '/_authenticated/scenarios/'
     | '/_authenticated/supply/'
   fileRoutesById: FileRoutesById
@@ -348,6 +400,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/business-plan': {
+      id: '/_authenticated/business-plan'
+      path: '/business-plan'
+      fullPath: '/business-plan'
+      preLoaderRoute: typeof AuthenticatedBusinessPlanRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/data-sources': {
       id: '/_authenticated/data-sources'
@@ -440,6 +499,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBusinessSignalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/master/products': {
+      id: '/_authenticated/master/products'
+      path: '/master/products'
+      fullPath: '/master/products'
+      preLoaderRoute: typeof AuthenticatedMasterProductsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/master/suppliers': {
+      id: '/_authenticated/master/suppliers'
+      path: '/master/suppliers'
+      fullPath: '/master/suppliers'
+      preLoaderRoute: typeof AuthenticatedMasterSuppliersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projects/': {
+      id: '/_authenticated/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AuthenticatedProjectsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/scenarios/': {
       id: '/_authenticated/scenarios/'
       path: '/scenarios'
@@ -486,6 +566,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedBusinessPlanRoute: typeof AuthenticatedBusinessPlanRoute
   AuthenticatedDataSourcesRoute: typeof AuthenticatedDataSourcesRoute
   AuthenticatedDemandPlanningRoute: typeof AuthenticatedDemandPlanningRoute
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
@@ -498,16 +579,20 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBusinessCustomersRoute: typeof AuthenticatedBusinessCustomersRoute
   AuthenticatedBusinessPipelineRoute: typeof AuthenticatedBusinessPipelineRoute
   AuthenticatedBusinessSignalsRoute: typeof AuthenticatedBusinessSignalsRoute
+  AuthenticatedMasterProductsRoute: typeof AuthenticatedMasterProductsRoute
+  AuthenticatedMasterSuppliersRoute: typeof AuthenticatedMasterSuppliersRoute
   AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
   AuthenticatedSupplyEconomicsRoute: typeof AuthenticatedSupplyEconomicsRoute
   AuthenticatedSupplyInboundRoute: typeof AuthenticatedSupplyInboundRoute
   AuthenticatedBusinessIndexRoute: typeof AuthenticatedBusinessIndexRoute
+  AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
   AuthenticatedSupplyIndexRoute: typeof AuthenticatedSupplyIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedBusinessPlanRoute: AuthenticatedBusinessPlanRoute,
   AuthenticatedDataSourcesRoute: AuthenticatedDataSourcesRoute,
   AuthenticatedDemandPlanningRoute: AuthenticatedDemandPlanningRoute,
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
@@ -520,11 +605,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBusinessCustomersRoute: AuthenticatedBusinessCustomersRoute,
   AuthenticatedBusinessPipelineRoute: AuthenticatedBusinessPipelineRoute,
   AuthenticatedBusinessSignalsRoute: AuthenticatedBusinessSignalsRoute,
+  AuthenticatedMasterProductsRoute: AuthenticatedMasterProductsRoute,
+  AuthenticatedMasterSuppliersRoute: AuthenticatedMasterSuppliersRoute,
   AuthenticatedScenariosScenarioIdRoute: AuthenticatedScenariosScenarioIdRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
   AuthenticatedSupplyEconomicsRoute: AuthenticatedSupplyEconomicsRoute,
   AuthenticatedSupplyInboundRoute: AuthenticatedSupplyInboundRoute,
   AuthenticatedBusinessIndexRoute: AuthenticatedBusinessIndexRoute,
+  AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
   AuthenticatedSupplyIndexRoute: AuthenticatedSupplyIndexRoute,
 }
