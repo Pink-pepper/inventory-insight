@@ -50,7 +50,7 @@ const TONE: Record<SignalCategory, { dot: string; chip: string }> = {
  */
 const RouteLink = Link as unknown as React.ComponentType<{
   to: string;
-  params?: Record<string, string>;
+  params?: Record<string, string> | undefined;
   className?: string;
   children: React.ReactNode;
 }>;
