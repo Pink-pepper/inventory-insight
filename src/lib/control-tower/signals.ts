@@ -443,12 +443,50 @@ export interface ControlTowerBriefing {
   allClear: boolean;
 }
 
+/**
+ * A briefing is only useful if it can be read. When one concern produces many
+ * near-identical rows, the strongest few are kept and the rest are rolled up
+ * into a single row that still names the records behind it.
+ */
+const ROLLUP_LIMIT = 5;
+
+function rollUp(signals: ControlTowerSignal[]): ControlTowerSignal[] {
+  const groups = new Map<string, ControlTowerSignal[]>();
+  for (const s of signals) {
+    const kind = s.id.split(":")[0] ?? s.id;
+    const list = groups.get(kind);
+    if (list) list.push(s);
+    else groups.set(kind, [s]);
+  }
+
+  const out: ControlTowerSignal[] = [];
+  for (const [kind, list] of groups) {
+    const sorted = [...list].sort((a, b) => b.weight - a.weight);
+    out.push(...sorted.slice(0, ROLLUP_LIMIT));
+    const rest = sorted.slice(ROLLUP_LIMIT);
+    if (rest.length === 0) continue;
+    const head = sorted[0]!;
+    out.push({
+      id: `rollup:${kind}`,
+      category: head.category,
+      weight: head.weight - 0.5,
+      headline: `${rest.length} more of the same: ${head.headline.toLowerCase()}`,
+      what: `${rest.length} further records share this condition. The most pressing ones are listed above.`,
+      why: head.why,
+      evidence: rest.slice(0, 12).map((r) => r.headline),
+      nextAction: head.nextAction,
+      link: head.link,
+    });
+  }
+  return out;
+}
+
 export function buildControlTower(input: ControlTowerInput): ControlTowerBriefing {
-  const signals = [
+  const signals = rollUp([
     ...stockSignals(input),
     ...shipmentSignals(input),
     ...commercialSignals(input),
-  ];
+  ]);
 
   const counts: Record<SignalCategory, number> = {
     urgent: 0,
