@@ -36,38 +36,51 @@ import { cn } from "@/lib/utils";
 /**
  * Navigation follows the distributor's working order: what the business has
  * sold or is about to sell, then what that means for stock and supply.
+ * Landed Costs is deliberately absent — it is reached contextually from
+ * Procurement, Products, Shipments and purchase orders.
  */
 type NavItem = {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** Reachable, but not yet a finished module. */
+  soon?: boolean;
 };
 
-const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
+type NavGroup = { label: string | null; items: NavItem[]; collapsible?: boolean };
+
+const NAV_GROUPS: NavGroup[] = [
   {
     label: null,
-    items: [{ to: "/overview", label: "Dashboard", icon: LayoutDashboard }],
+    items: [{ to: "/overview", label: "Control Tower", icon: LayoutDashboard }],
   },
   {
     label: "Business",
+    collapsible: true,
     items: [
-      { to: "/business", label: "Demand Book", icon: BookOpen },
-      { to: "/projects", label: "Projects", icon: Briefcase },
-      { to: "/business/pipeline", label: "Pipeline", icon: Handshake },
       { to: "/business/customers", label: "Customers", icon: Users },
+      { to: "/projects", label: "Projects", icon: Briefcase },
+      { to: "/business", label: "Demand Book", icon: BookOpen },
       { to: "/business/signals", label: "Market Signals", icon: Radar },
+    ],
+  },
+  {
+    label: "Inventory",
+    collapsible: true,
+    items: [
+      { to: "/inventory", label: "Inventory", icon: Boxes },
+      { to: "/master/products", label: "Products", icon: Package },
+      { to: "/master/suppliers", label: "Suppliers", icon: Factory },
     ],
   },
   {
     label: "Planning",
     items: [
-      { to: "/inventory", label: "Inventory", icon: Boxes },
       { to: "/demand-planning", label: "Demand Plan", icon: TrendingUp },
       { to: "/supply-planning", label: "Supply Plan", icon: Truck },
-      { to: "/distribution", label: "Distribution", icon: ArrowLeftRight },
       { to: "/business-plan", label: "Business Plan", icon: Target },
-      { to: "/scenarios", label: "Scenario", icon: FlaskConical },
-      { to: "/recommendations", label: "Analytics", icon: ClipboardList },
+      { to: "/scenarios", label: "Scenarios", icon: FlaskConical },
+      { to: "/distribution", label: "Distribution", icon: ArrowLeftRight, soon: true },
     ],
   },
   {
@@ -76,25 +89,21 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
       { to: "/purchasing", label: "Procurement", icon: ShoppingCart },
       { to: "/supply", label: "Shipments", icon: Ship },
       { to: "/supply/inbound", label: "Inbound", icon: PackageCheck },
-      { to: "/supply/economics", label: "Landed Costs", icon: Coins },
     ],
   },
   {
-    label: "Master data",
-    items: [
-      { to: "/master/products", label: "Products", icon: Package },
-      { to: "/master/suppliers", label: "Suppliers", icon: Factory },
-    ],
+    label: "Analytics",
+    items: [{ to: "/recommendations", label: "Analytics", icon: ClipboardList }],
   },
   {
     label: "Data",
     items: [
-      { to: "/data-sources", label: "Data Sources", icon: Database },
+      { to: "/data-sources", label: "Data Hub", icon: Database },
       { to: "/settings", label: "Settings", icon: Settings },
     ],
   },
-
 ];
+
 
 const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
