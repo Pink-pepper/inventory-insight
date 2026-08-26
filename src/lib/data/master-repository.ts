@@ -188,6 +188,8 @@ export async function loadSupplierMaster(supabase: Db, orgId: string): Promise<S
       leadTimeDays: s.lead_time_days,
       minOrderQty: s.min_order_qty,
       reliability: Number(s.reliability ?? 0),
+      // Contacts are customer-linked in the current model; only unassigned
+      // contacts are shown here, and none are invented for a supplier.
       contacts: (contacts ?? []).map((c) => ({
         id: c.id,
         name: c.name,
@@ -195,6 +197,7 @@ export async function loadSupplierMaster(supabase: Db, orgId: string): Promise<S
         email: c.email,
         phone: c.phone,
       })),
+
       products: linesBySupplier.get(s.id) ?? [],
       shipmentsTracked: p?.tracked ?? 0,
       onTimePct: p && p.tracked > 0 ? (p.onTime / p.tracked) * 100 : null,
