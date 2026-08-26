@@ -42,12 +42,20 @@ const IMPACT_TONE = {
   informational: "neutral",
 } as const;
 
+const GROUP_LABEL: Record<MarketSignalImpact, string> = {
+  risk: "Worth watching",
+  opportunity: "Worth acting on",
+  informational: "Good to know",
+};
+
 function SignalsPage() {
   const fn = useServerFn(getBusinessBook);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["business-book"],
     queryFn: () => fn(),
   });
+  const [expanded, setExpanded] = useState<string | null>(null);
+
 
   const fields: FieldSpec[] = useMemo(
     () => [
