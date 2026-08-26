@@ -123,7 +123,11 @@ export async function loadSupplierMaster(supabase: Db, orgId: string): Promise<S
       )
       .eq("org_id", orgId)
       .order("name"),
-    supabase.from("contacts").select("id, name, role, email, phone, notes").eq("org_id", orgId),
+    supabase
+      .from("contacts")
+      .select("id, name, role, email, phone, notes")
+      .eq("org_id", orgId)
+      .is("customer_id", null),
     supabase
       .from("shipments")
       .select("supplier_id, eta, revised_eta, arrived_on, status")
