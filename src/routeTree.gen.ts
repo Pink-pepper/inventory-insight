@@ -26,6 +26,7 @@ import { Route as AuthenticatedBusinessIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedBusinessCustomersRouteImport } from './routes/_authenticated/business.customers'
 import { Route as AuthenticatedBusinessPipelineRouteImport } from './routes/_authenticated/business.pipeline'
 import { Route as AuthenticatedBusinessSignalsRouteImport } from './routes/_authenticated/business.signals'
+import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects.index'
 import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
 import { Route as AuthenticatedSkuSkuRouteImport } from './routes/_authenticated/sku.$sku'
@@ -126,6 +127,12 @@ const AuthenticatedBusinessSignalsRoute =
     path: '/business/signals',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedProjectsIndexRoute =
+  AuthenticatedProjectsIndexRouteImport.update({
+    id: '/projects/',
+    path: '/projects/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedScenariosIndexRoute =
   AuthenticatedScenariosIndexRouteImport.update({
     id: '/scenarios/',
@@ -183,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
   '/supply/inbound': typeof AuthenticatedSupplyInboundRoute
   '/business/': typeof AuthenticatedBusinessIndexRoute
+  '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/scenarios/': typeof AuthenticatedScenariosIndexRoute
   '/supply/': typeof AuthenticatedSupplyIndexRoute
 }
@@ -207,6 +215,7 @@ export interface FileRoutesByTo {
   '/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
   '/supply/inbound': typeof AuthenticatedSupplyInboundRoute
   '/business': typeof AuthenticatedBusinessIndexRoute
+  '/projects': typeof AuthenticatedProjectsIndexRoute
   '/scenarios': typeof AuthenticatedScenariosIndexRoute
   '/supply': typeof AuthenticatedSupplyIndexRoute
 }
@@ -233,6 +242,7 @@ export interface FileRoutesById {
   '/_authenticated/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
   '/_authenticated/supply/inbound': typeof AuthenticatedSupplyInboundRoute
   '/_authenticated/business/': typeof AuthenticatedBusinessIndexRoute
+  '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/scenarios/': typeof AuthenticatedScenariosIndexRoute
   '/_authenticated/supply/': typeof AuthenticatedSupplyIndexRoute
 }
@@ -259,6 +269,7 @@ export interface FileRouteTypes {
     | '/supply/economics'
     | '/supply/inbound'
     | '/business/'
+    | '/projects/'
     | '/scenarios/'
     | '/supply/'
   fileRoutesByTo: FileRoutesByTo
@@ -283,6 +294,7 @@ export interface FileRouteTypes {
     | '/supply/economics'
     | '/supply/inbound'
     | '/business'
+    | '/projects'
     | '/scenarios'
     | '/supply'
   id:
@@ -308,6 +320,7 @@ export interface FileRouteTypes {
     | '/_authenticated/supply/economics'
     | '/_authenticated/supply/inbound'
     | '/_authenticated/business/'
+    | '/_authenticated/projects/'
     | '/_authenticated/scenarios/'
     | '/_authenticated/supply/'
   fileRoutesById: FileRoutesById
@@ -440,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBusinessSignalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/projects/': {
+      id: '/_authenticated/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AuthenticatedProjectsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/scenarios/': {
       id: '/_authenticated/scenarios/'
       path: '/scenarios'
@@ -503,6 +523,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSupplyEconomicsRoute: typeof AuthenticatedSupplyEconomicsRoute
   AuthenticatedSupplyInboundRoute: typeof AuthenticatedSupplyInboundRoute
   AuthenticatedBusinessIndexRoute: typeof AuthenticatedBusinessIndexRoute
+  AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedScenariosIndexRoute: typeof AuthenticatedScenariosIndexRoute
   AuthenticatedSupplyIndexRoute: typeof AuthenticatedSupplyIndexRoute
 }
@@ -525,6 +546,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSupplyEconomicsRoute: AuthenticatedSupplyEconomicsRoute,
   AuthenticatedSupplyInboundRoute: AuthenticatedSupplyInboundRoute,
   AuthenticatedBusinessIndexRoute: AuthenticatedBusinessIndexRoute,
+  AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedScenariosIndexRoute: AuthenticatedScenariosIndexRoute,
   AuthenticatedSupplyIndexRoute: AuthenticatedSupplyIndexRoute,
 }
