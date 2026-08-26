@@ -118,10 +118,10 @@ export const seedPlanFromDemand = createServerFn({ method: "POST" })
       const price = p?.unitPrice ?? null;
       const cost = p?.landedCost ?? p?.unitCost ?? null;
       const cur = agg.get(r.productId) ?? { quantity: 0, revenue: 0, gp: 0 };
-      cur.quantity += r.quantity;
+      cur.quantity += r.resolvedQty;
       if (price != null) {
-        cur.revenue += r.quantity * price;
-        if (cost != null) cur.gp += r.quantity * (price - cost);
+        cur.revenue += r.resolvedQty * price;
+        if (cost != null) cur.gp += r.resolvedQty * (price - cost);
       }
       agg.set(r.productId, cur);
     }
