@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, LineChart, ShieldCheck, Boxes } from "lucide-react";
+import { ArrowRight, Compass, Boxes, LineChart, Ship, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -9,34 +9,41 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Ionic turns inventory and sales data into transparent purchasing decisions for distributors: reorder points, order quantities and excess capital, explained in plain English.",
+          "Ionic turns your commercial and inventory data into one operator briefing: what to buy, when to buy it, what it lands at, and what your customers actually need.",
       },
-      { property: "og:title", content: "Ionic — Inventory & purchasing decision intelligence" },
+      { property: "og:title", content: "Ionic — Decision intelligence for distributors" },
       {
         property: "og:description",
         content:
-          "Transparent, rule-based reorder recommendations for distributors and inventory-based businesses.",
+          "One control tower for demand, supply, landed cost and the business plan behind them.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Landing,
 });
 
-const FEATURES = [
+const PILLARS = [
+  {
+    icon: Compass,
+    title: "A briefing, not a dashboard",
+    body: "Every morning Ionic ranks what needs a decision — cover breaches, slipping ETAs, ageing quotations — with the evidence attached.",
+  },
   {
     icon: LineChart,
-    title: "Decisions, not dashboards",
-    body: "Every SKU gets a call — reorder, watch, hold or excess — with the quantity, the cost and the reasoning behind it.",
+    title: "One demand book",
+    body: "History, requirements, quotations and confirmed orders resolve into a single expected demand picture. Nothing is counted twice.",
+  },
+  {
+    icon: Ship,
+    title: "Landed economics",
+    body: "Freight, duty, clearance and FX build up into the real unit cost, so a quoted price is checked against what the goods actually cost.",
   },
   {
     icon: Boxes,
-    title: "Connector-agnostic model",
-    body: "CSV today, ERP connectors next. Everything maps into one canonical inventory model, so the logic never depends on column names.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Built for teams",
-    body: "Organizations, roles and database-enforced row-level security keep every tenant's data strictly isolated.",
+    title: "Plans that reconcile",
+    body: "Build the year bottom-up from customers, or set the target top-down and allocate it. Ionic shows the gap between the two.",
   },
 ];
 
@@ -59,16 +66,16 @@ function Landing() {
 
       <main className="mx-auto max-w-5xl px-6">
         <section className="py-20">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Inventory & purchasing decision intelligence
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            Decision intelligence for B2B distributors
           </p>
-          <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl">
+          <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight text-foreground sm:text-5xl">
             Know what to buy, when to buy it, and how much.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground">
-            Ionic reads your inventory and sales history and turns it into defensible purchasing
-            decisions — reorder points, order quantities, stockout risk and the working capital
-            trapped in excess stock. Transparent rules you can audit, not a black box.
+            Ionic reads your sales, stock, purchase orders and commercial pipeline, and turns them
+            into defensible decisions — reorder quantities, landed cost, expected demand and the
+            capital sitting in excess stock. Transparent rules you can audit, not a black box.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild>
@@ -82,8 +89,8 @@ function Landing() {
           </div>
         </section>
 
-        <section className="grid gap-3 pb-20 sm:grid-cols-3">
-          {FEATURES.map((f) => (
+        <section className="grid gap-3 pb-14 sm:grid-cols-2">
+          {PILLARS.map((f) => (
             <div key={f.title} className="panel p-5">
               <f.icon className="size-4 text-primary" />
               <h2 className="mt-3 text-sm font-semibold">{f.title}</h2>
@@ -91,11 +98,29 @@ function Landing() {
             </div>
           ))}
         </section>
+
+        <section className="mb-20 rounded-lg border border-border bg-surface-muted p-6">
+          <div className="flex flex-wrap items-start gap-4">
+            <Truck className="mt-0.5 size-5 text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">Distribution planning</h2>
+                <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  Coming soon
+                </span>
+              </div>
+              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                Multi-location rebalancing — moving stock to where the demand actually is, with the
+                same transparent rules behind every suggested transfer.
+              </p>
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-6 text-xs text-muted-foreground">
-          Ionic — inventory decision intelligence for growing distributors.
+          Ionic — inventory and commercial decision intelligence for growing distributors.
         </div>
       </footer>
     </div>

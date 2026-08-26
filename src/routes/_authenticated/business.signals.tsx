@@ -1,12 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { AppShell, Loading } from "@/components/app-shell";
 import { Pill } from "@/components/status-badge";
 import { BusinessRecordTable, type FieldSpec } from "@/components/business-record-table";
 import { getBusinessBook } from "@/lib/business.functions";
-import { MARKET_SIGNAL_KINDS, MARKET_SIGNAL_LABEL } from "@/lib/domain/commercial";
+import {
+  MARKET_SIGNAL_KINDS,
+  MARKET_SIGNAL_LABEL,
+  type MarketSignalImpact,
+  type MarketSignalRecord,
+} from "@/lib/domain/commercial";
+
 
 export const Route = createFileRoute("/_authenticated/business/signals")({
   head: () => ({
@@ -35,12 +42,20 @@ const IMPACT_TONE = {
   informational: "neutral",
 } as const;
 
+const GROUP_LABEL: Record<MarketSignalImpact, string> = {
+  risk: "Worth watching",
+  opportunity: "Worth acting on",
+  informational: "Good to know",
+};
+
 function SignalsPage() {
   const fn = useServerFn(getBusinessBook);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["business-book"],
     queryFn: () => fn(),
   });
+  const [expanded, setExpanded] = useState<string | null>(null);
+
 
   const fields: FieldSpec[] = useMemo(
     () => [
@@ -88,6 +103,17 @@ function SignalsPage() {
     [data],
   );
 
+  const grouped = useMemo(() => {
+    const order: MarketSignalImpact[] = ["risk", "opportunity", "informational"];
+    const buckets = new Map<MarketSignalImpact, MarketSignalRecord[]>();
+    for (const impact of order) buckets.set(impact, []);
+    for (const s of data?.marketSignals ?? []) buckets.get(s.impact)?.push(s);
+    for (const list of buckets.values()) list.sort((a, b) => b.observedOn.localeCompare(a.observedOn));
+    return order
+      .map((impact) => ({ impact, rows: buckets.get(impact) ?? [] }))
+      .filter((g) => g.rows.length > 0);
+  }, [data]);
+
   return (
     <AppShell
       title="Market Signals"
@@ -100,6 +126,70 @@ function SignalsPage() {
           {error instanceof Error ? error.message : "Could not load market signals."}
         </p>
       ) : !data ? null : (
+        <div className="space-y-8">
+          {grouped.length > 0 ? (
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Intelligence feed</h2>
+                <p className="text-sm text-muted-foreground">
+                  Grouped by what the observation means for you. Nothing here changes a number anywhere in Ionic.
+                </p>
+              </div>
+              {grouped.map((group) => (
+                <div key={group.impact} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Pill tone={IMPACT_TONE[group.impact]}>{GROUP_LABEL[group.impact]}</Pill>
+                    <span className="text-xs text-muted-foreground">{group.rows.length}</span>
+                  </div>
+                  <div className="panel divide-y divide-border">
+                    {group.rows.map((s) => {
+                      const isOpen = expanded === s.id;
+                      const related = [s.customerName, s.supplierName, s.sku].filter(Boolean).join(" · ");
+                      return (
+                        <div key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => setExpanded(isOpen ? null : s.id)}
+                            className="flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-muted"
+                          >
+                            {isOpen ? (
+                              <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                            )}
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium text-foreground">{s.title}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {MARKET_SIGNAL_LABEL[s.kind as keyof typeof MARKET_SIGNAL_LABEL] ?? s.kind}
+                                {related ? ` · ${related}` : ""}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {s.observedOn}
+                            </span>
+                          </button>
+                          {isOpen ? (
+                            <p className="border-t border-border bg-surface-muted/60 px-3 py-3 text-sm leading-relaxed text-muted-foreground">
+                              {s.detail ?? "No further detail recorded."}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ) : null}
+
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Manage signals</h2>
+              <p className="text-sm text-muted-foreground">
+                Record, edit or remove observations. Each one keeps its date and who it relates to.
+              </p>
+            </div>
+
         <BusinessRecordTable
           table="market_signals"
           invalidate={[["business-book"]]}
@@ -137,8 +227,11 @@ function SignalsPage() {
             supplier_id: s.supplierId,
             detail: s.detail,
           })}
-        />
+            />
+          </section>
+        </div>
       )}
+
     </AppShell>
   );
 }
