@@ -27,6 +27,7 @@ import { Route as AuthenticatedBusinessCustomersRouteImport } from './routes/_au
 import { Route as AuthenticatedBusinessPipelineRouteImport } from './routes/_authenticated/business.pipeline'
 import { Route as AuthenticatedBusinessSignalsRouteImport } from './routes/_authenticated/business.signals'
 import { Route as AuthenticatedMasterProductsRouteImport } from './routes/_authenticated/master.products'
+import { Route as AuthenticatedMasterSuppliersRouteImport } from './routes/_authenticated/master.suppliers'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects.index'
 import { Route as AuthenticatedScenariosIndexRouteImport } from './routes/_authenticated/scenarios.index'
 import { Route as AuthenticatedScenariosScenarioIdRouteImport } from './routes/_authenticated/scenarios.$scenarioId'
@@ -134,6 +135,12 @@ const AuthenticatedMasterProductsRoute =
     path: '/master/products',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedMasterSuppliersRoute =
+  AuthenticatedMasterSuppliersRouteImport.update({
+    id: '/master/suppliers',
+    path: '/master/suppliers',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProjectsIndexRoute =
   AuthenticatedProjectsIndexRouteImport.update({
     id: '/projects/',
@@ -193,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/business/signals': typeof AuthenticatedBusinessSignalsRoute
   '/master/products': typeof AuthenticatedMasterProductsRoute
+  '/master/suppliers': typeof AuthenticatedMasterSuppliersRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
@@ -219,6 +227,7 @@ export interface FileRoutesByTo {
   '/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/business/signals': typeof AuthenticatedBusinessSignalsRoute
   '/master/products': typeof AuthenticatedMasterProductsRoute
+  '/master/suppliers': typeof AuthenticatedMasterSuppliersRoute
   '/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
@@ -247,6 +256,7 @@ export interface FileRoutesById {
   '/_authenticated/business/pipeline': typeof AuthenticatedBusinessPipelineRoute
   '/_authenticated/business/signals': typeof AuthenticatedBusinessSignalsRoute
   '/_authenticated/master/products': typeof AuthenticatedMasterProductsRoute
+  '/_authenticated/master/suppliers': typeof AuthenticatedMasterSuppliersRoute
   '/_authenticated/scenarios/$scenarioId': typeof AuthenticatedScenariosScenarioIdRoute
   '/_authenticated/sku/$sku': typeof AuthenticatedSkuSkuRoute
   '/_authenticated/supply/economics': typeof AuthenticatedSupplyEconomicsRoute
@@ -275,6 +285,7 @@ export interface FileRouteTypes {
     | '/business/pipeline'
     | '/business/signals'
     | '/master/products'
+    | '/master/suppliers'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
     | '/supply/economics'
@@ -301,6 +312,7 @@ export interface FileRouteTypes {
     | '/business/pipeline'
     | '/business/signals'
     | '/master/products'
+    | '/master/suppliers'
     | '/scenarios/$scenarioId'
     | '/sku/$sku'
     | '/supply/economics'
@@ -328,6 +340,7 @@ export interface FileRouteTypes {
     | '/_authenticated/business/pipeline'
     | '/_authenticated/business/signals'
     | '/_authenticated/master/products'
+    | '/_authenticated/master/suppliers'
     | '/_authenticated/scenarios/$scenarioId'
     | '/_authenticated/sku/$sku'
     | '/_authenticated/supply/economics'
@@ -473,6 +486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMasterProductsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/master/suppliers': {
+      id: '/_authenticated/master/suppliers'
+      path: '/master/suppliers'
+      fullPath: '/master/suppliers'
+      preLoaderRoute: typeof AuthenticatedMasterSuppliersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/projects/': {
       id: '/_authenticated/projects/'
       path: '/projects'
@@ -539,6 +559,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBusinessPipelineRoute: typeof AuthenticatedBusinessPipelineRoute
   AuthenticatedBusinessSignalsRoute: typeof AuthenticatedBusinessSignalsRoute
   AuthenticatedMasterProductsRoute: typeof AuthenticatedMasterProductsRoute
+  AuthenticatedMasterSuppliersRoute: typeof AuthenticatedMasterSuppliersRoute
   AuthenticatedScenariosScenarioIdRoute: typeof AuthenticatedScenariosScenarioIdRoute
   AuthenticatedSkuSkuRoute: typeof AuthenticatedSkuSkuRoute
   AuthenticatedSupplyEconomicsRoute: typeof AuthenticatedSupplyEconomicsRoute
@@ -563,6 +584,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBusinessPipelineRoute: AuthenticatedBusinessPipelineRoute,
   AuthenticatedBusinessSignalsRoute: AuthenticatedBusinessSignalsRoute,
   AuthenticatedMasterProductsRoute: AuthenticatedMasterProductsRoute,
+  AuthenticatedMasterSuppliersRoute: AuthenticatedMasterSuppliersRoute,
   AuthenticatedScenariosScenarioIdRoute: AuthenticatedScenariosScenarioIdRoute,
   AuthenticatedSkuSkuRoute: AuthenticatedSkuSkuRoute,
   AuthenticatedSupplyEconomicsRoute: AuthenticatedSupplyEconomicsRoute,
