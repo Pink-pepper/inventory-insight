@@ -31,6 +31,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { getWorkspace } from "@/lib/ionic.functions";
 import { formatProductLabel } from "@/lib/domain/planning-policy";
+import { setDisplayCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -146,6 +147,8 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { data } = useWorkspace();
+  // One place applies the workspace display currency to the formatting layer.
+  setDisplayCurrency(data?.planningPolicy.displayCurrency, data?.planningPolicy.fxRates);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });

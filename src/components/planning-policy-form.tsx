@@ -9,6 +9,7 @@ import {
   type PlanningPolicy,
   type ProductDisplay,
 } from "@/lib/domain/planning-policy";
+import { BASE_CURRENCY, CURRENCY_OPTIONS } from "@/lib/domain/currency";
 
 type NumericField = {
   key: keyof PlanningPolicy;
@@ -97,7 +98,12 @@ export function PlanningPolicyForm({
   }
 
   function reset() {
-    setDraft({ ...EMPTY_PLANNING_POLICY, productDisplay: draft.productDisplay });
+    setDraft({
+      ...EMPTY_PLANNING_POLICY,
+      productDisplay: draft.productDisplay,
+      displayCurrency: draft.displayCurrency,
+      fxRates: draft.fxRates,
+    });
   }
 
   const field = (f: NumericField) => (
