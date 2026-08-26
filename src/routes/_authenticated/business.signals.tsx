@@ -105,7 +105,7 @@ function SignalsPage() {
 
   const grouped = useMemo(() => {
     const order: MarketSignalImpact[] = ["risk", "opportunity", "informational"];
-    const buckets = new Map<MarketSignalImpact, typeof data extends undefined ? never : NonNullable<typeof data>["marketSignals"]>();
+    const buckets = new Map<MarketSignalImpact, MarketSignalRecord[]>();
     for (const impact of order) buckets.set(impact, []);
     for (const s of data?.marketSignals ?? []) buckets.get(s.impact)?.push(s);
     for (const list of buckets.values()) list.sort((a, b) => b.observedOn.localeCompare(a.observedOn));
