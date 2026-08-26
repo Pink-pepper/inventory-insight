@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { PlanningFilters } from "@/components/planning-filters";
 import { getDemandPlan, getRecommendations } from "@/lib/ionic.functions";
+import { getProductMaster } from "@/lib/master-data.functions";
+import { DISPLAY_UNITS, displayQuantity, formatQuantity } from "@/lib/domain/uom";
 import type { PlanningFilter } from "@/lib/query/filters";
 import { applyPlanningFilter } from "@/lib/query/filters";
 import { cover, money, num } from "@/lib/format";
@@ -39,6 +41,14 @@ function InventoryPage() {
     queryFn: () => fn(),
   });
   const [filter, setFilter] = useState<PlanningFilter>({ compare: "prev" });
+  // Physical quantity is a display concern: packages are the stored unit.
+  const [unit, setUnit] = useState<string>("");
+  const masterFn = useServerFn(getProductMaster);
+  const { data: master } = useQuery({ queryKey: ["product-master"], queryFn: () => masterFn() });
+  const packBySku = useMemo(
+    () => new Map((master ?? []).map((p) => [p.sku, p])),
+    [master],
+  );
 
   // Demand context for the same scope: direction comes from the demand
   // workspace so both screens explain movement with identical numbers.
@@ -69,7 +79,7 @@ function InventoryPage() {
       description="On-hand and inbound stock positions across all products and locations."
     >
       {isLoading ? (
-        <TableSkeleton columns={9} />
+        <TableSkeleton columns={11} />
       ) : isError ? (
         <EmptyState
           title="Could not load inventory"
@@ -102,20 +112,35 @@ function InventoryPage() {
             />
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Quantity in</span>
+            <select
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              className="rounded-md border border-border bg-surface px-2 py-1 text-xs"
+            >
+              <option value="">Pack unit</option>
+              {DISPLAY_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
             <span className="ml-auto text-xs text-muted-foreground tabular">
               {rows.length} SKUs · {money(rows.reduce((s, r) => s + r.inventoryValue, 0))} at cost
             </span>
           </div>
 
           <div className="panel overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-surface-muted">
                 <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2.5 font-medium">SKU</th>
                   <th className="px-3 py-2.5 font-medium">Product</th>
                   <th className="px-3 py-2.5 font-medium">Category</th>
                   <th className="px-3 py-2.5 font-medium">Supplier</th>
-                  <th className="px-3 py-2.5 text-right font-medium">On hand</th>
+                  <th className="px-3 py-2.5 text-right font-medium">In stock (units)</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Pack size</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Quantity</th>
                   <th className="px-3 py-2.5 text-right font-medium">On order</th>
                   <th className="px-3 py-2.5 font-medium">Locations</th>
                   <th className="px-3 py-2.5 text-right font-medium">Demand</th>
@@ -141,6 +166,18 @@ function InventoryPage() {
                     <td className="px-3 py-2.5 text-muted-foreground">{r.category}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{r.supplierName}</td>
                     <td className="px-3 py-2.5 text-right tabular">{num(r.onHand)}</td>
+                    <td className="px-3 py-2.5 text-right tabular text-muted-foreground">
+                      {packBySku.get(r.sku)?.packSize
+                        ? `${num(packBySku.get(r.sku)!.packSize!, 3)} ${packBySku.get(r.sku)!.packUom ?? ""}`.trim()
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular">
+                      {(() => {
+                        const p = packBySku.get(r.sku);
+                        const q = displayQuantity(r.onHand, p?.packSize, p?.packUom, unit || null);
+                        return q ? formatQuantity(q.value, q.unit) : "—";
+                      })()}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular text-muted-foreground">
                       {r.onOrder ? num(r.onOrder) : "—"}
                     </td>

@@ -9,6 +9,7 @@ import {
   type PlanningPolicy,
   type ProductDisplay,
 } from "@/lib/domain/planning-policy";
+import { BASE_CURRENCY, CURRENCY_OPTIONS } from "@/lib/domain/currency";
 
 type NumericField = {
   key: keyof PlanningPolicy;
@@ -97,7 +98,12 @@ export function PlanningPolicyForm({
   }
 
   function reset() {
-    setDraft({ ...EMPTY_PLANNING_POLICY, productDisplay: draft.productDisplay });
+    setDraft({
+      ...EMPTY_PLANNING_POLICY,
+      productDisplay: draft.productDisplay,
+      displayCurrency: draft.displayCurrency,
+      fxRates: draft.fxRates,
+    });
   }
 
   const field = (f: NumericField) => (
@@ -167,6 +173,67 @@ export function PlanningPolicyForm({
           ))}
         </div>
       </div>
+
+      <div>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Display currency
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Amounts are stored in {BASE_CURRENCY} and converted for display only, using the manual
+          rate you enter. This is a reading convenience, not accounting-grade FX.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="block">
+            <span className="text-xs font-medium text-foreground">Currency</span>
+            <select
+              disabled={!canManage}
+              value={draft.displayCurrency ?? BASE_CURRENCY}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  displayCurrency: e.target.value === BASE_CURRENCY ? null : e.target.value,
+                }))
+              }
+              className="mt-1 w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm disabled:opacity-60"
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                  {c === BASE_CURRENCY ? " (as stored)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {draft.displayCurrency && draft.displayCurrency !== BASE_CURRENCY ? (
+            <label className="block">
+              <span className="text-xs font-medium text-foreground">
+                Rate — {draft.displayCurrency} per 1 {BASE_CURRENCY}
+              </span>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                disabled={!canManage}
+                value={draft.fxRates?.[draft.displayCurrency] ?? ""}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    fxRates: {
+                      ...(d.fxRates ?? {}),
+                      [d.displayCurrency as string]: Number(e.target.value),
+                    },
+                  }))
+                }
+                className="mt-1 w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm disabled:opacity-60"
+              />
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Without a rate, figures stay in {BASE_CURRENCY}.
+              </span>
+            </label>
+          ) : null}
+        </div>
+      </div>
+
 
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
