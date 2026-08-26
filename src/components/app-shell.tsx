@@ -1,4 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -15,16 +16,15 @@ import {
   LogOut,
   Loader2,
   BookOpen,
-  Handshake,
   Users,
   Radar,
   Ship,
   PackageCheck,
-  Coins,
   Briefcase,
   Package,
   Factory,
   Target,
+  ChevronDown,
 } from "lucide-react";
 
 
@@ -149,6 +149,10 @@ export function AppShell({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Collapsible groups keep the sidebar short without hiding anything permanently.
+  const [closed, setClosed] = useState<string[]>([]);
+  const toggleGroup = (label: string) =>
+    setClosed((c) => (c.includes(label) ? c.filter((x) => x !== label) : [...c, label]));
 
   async function signOut() {
     await queryClient.cancelQueries();
